@@ -1,22 +1,16 @@
 <script setup lang="ts">
-
-import ApartmentPage from "@/pages/ApartmentPage.vue";
-import HouseGridPage from "@/pages/HouseGridPage.vue";
+import HouseGridPage from '@/pages/HouseGridPage.vue'
 </script>
 
 <template>
-<!--  <ApartmentPage />-->
-    <div class="main">
-
-    </div>
-    <HouseGridPage />
+  <HouseGridPage />
 </template>
 
-<style scoped>
-  .main {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      justify-content: center;
-  }
+<style>
+html, body, #app {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
 </style>
