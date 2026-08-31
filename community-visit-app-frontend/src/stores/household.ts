@@ -7,6 +7,7 @@ import { fetchHouseholds, updateHousehold } from '@/api/household'
 export const useHouseholdStore = defineStore('household', () => {
   // ─── State ─────────────────────────────────────────────
   const list = ref<Household[]>([])
+  const currentUnitId = ref<string | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -25,12 +26,13 @@ export const useHouseholdStore = defineStore('household', () => {
 
   // ─── Actions ───────────────────────────────────────────
 
-  /** 加载全部住户 */
-  async function loadList() {
+  /** 加载某单元下全部住户 */
+  async function loadList(unitId: string) {
+    currentUnitId.value = unitId
     loading.value = true
     error.value = null
     try {
-      list.value = await fetchHouseholds()
+      list.value = await fetchHouseholds(unitId)
     } catch (e: any) {
       const msg = e?.message || '加载住户数据失败'
       error.value = msg
@@ -42,10 +44,12 @@ export const useHouseholdStore = defineStore('household', () => {
 
   /** 修改住户信息 */
   async function edit(roomNo: string, data: Partial<Household>) {
+    const unitId = currentUnitId.value
+    if (!unitId) throw new Error('未指定单元，无法修改住户信息')
     loading.value = true
     error.value = null
     try {
-      const updated = await updateHousehold(roomNo, data)
+      const updated = await updateHousehold(unitId, roomNo, data)
       // 本地同步更新
       const idx = list.value.findIndex(h => h.roomNo === roomNo)
       if (idx !== -1) list.value[idx] = updated
@@ -68,5 +72,5 @@ export const useHouseholdStore = defineStore('household', () => {
     completedTodos.value.add(roomNo)
   }
 
-  return { list, loading, error, completedTodos, todoList, findByRoomNo, loadList, edit, markTodoDone }
+  return { list, currentUnitId, loading, error, completedTodos, todoList, findByRoomNo, loadList, edit, markTodoDone }
 })

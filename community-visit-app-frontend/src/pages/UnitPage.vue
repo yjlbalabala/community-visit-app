@@ -1,19 +1,19 @@
 <template>
-  <div class="app-shell">
-    <!-- 顶部 Header -->
-    <HeaderBar />
-
-    <div class="app-body">
+  <div class="unit-shell">
+    <div class="unit-body">
       <!-- 左侧导航 -->
       <SideNav v-model:active="activeTab" />
 
       <!-- 中间内容区 -->
       <main class="content-area">
-        <!-- 小区可视化 -->
+        <!-- 住户可视化 -->
         <div v-show="activeTab === 'chart'" class="tab-content chart-tab">
           <el-card shadow="hover" class="chart-card">
             <template #header>
-              <span class="card-title">🏘️ 小区单元可视化</span>
+              <div class="level-header">
+                <span class="card-title">🏘️ {{ unitName }} · 住户可视化</span>
+                <span class="card-sub">{{ householdStore.list.length }} 户</span>
+              </div>
             </template>
             <div ref="chartRef" class="echarts-box"></div>
           </el-card>
@@ -52,22 +52,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import type { Household, HouseholdStatus } from '@/types'
 import { useHouseholdStore } from '@/stores/household'
 import { useOperationLogStore } from '@/stores/operationLog'
+import { useHierarchyStore } from '@/stores/hierarchy'
 import type { NavTab } from '@/components/SideNav.vue'
-import HeaderBar from '@/components/HeaderBar.vue'
 import SideNav from '@/components/SideNav.vue'
 import TodoPanel from '@/components/TodoPanel.vue'
 import OperationLog from '@/components/OperationLog.vue'
 import HouseDetailDrawer from '@/components/HouseDetailDrawer.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
 
-// ─── Stores ────────────────────────────────────────────
+// ─── 路由 & Stores ───────────────────────────────────────
+const route = useRoute()
+const unitId = route.params.unitId as string
+
 const householdStore = useHouseholdStore()
 const opLogStore = useOperationLogStore()
+const hierarchyStore = useHierarchyStore()
+
+const unitName = computed(() => hierarchyStore.currentNode?.name ?? '单元')
 
 // ─── 导航 ──────────────────────────────────────────────
 const activeTab = ref<NavTab>('chart')
@@ -115,7 +122,7 @@ const renderChart = () => {
     grid: { left: 0, top: 0, right: 0, bottom: 0 },
     series: [{
       type: 'custom',
-      renderItem: (_params, api) => {
+      renderItem: (_params, _api) => {
         const item = data[_params.dataIndex]
         if (!item) return null
         const { floor, door } = item
@@ -126,11 +133,11 @@ const renderChart = () => {
         return {
           type: 'rect',
           shape: { x, y, width: cellWidth, height: cellHeight },
-          style: api.style({
+          style: {
             fill: statusColorMap[item.status],
             stroke: '#fff',
             lineWidth: 2
-          }),
+          },
           textContent: {
             type: 'text',
             style: {
@@ -163,16 +170,14 @@ const initChart = async () => {
   if (chartInstance) chartInstance.dispose()
 
   chartInstance = echarts.init(chartRef.value)
-  console.log('ECharts 实例初始化成功')
 
   renderChart()
 
   resizeHandler = () => chartInstance?.resize()
   window.addEventListener('resize', resizeHandler)
 
-  // 点击事件：不设 series 名称过滤，兼容 custom 系列
+  // 点击事件：打开房屋详情抽屉
   chartInstance.on('click', (params: any) => {
-    console.log('ECharts click event:', params)
     if (params.data && params.data.roomNo) {
       openDrawer(params.data as Household)
     }
@@ -252,7 +257,8 @@ const handleSave = async (roomNo: string, data: Partial<Household>) => {
 
 // ─── 生命周期 ──────────────────────────────────────────
 onMounted(async () => {
-  await householdStore.loadList()
+  await hierarchyStore.enterLevel('unit', unitId)
+  await householdStore.loadList(unitId)
   await opLogStore.loadLogs()
   await initChart()
 })
@@ -270,53 +276,54 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.app-shell {
+.unit-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  background: #f0f2f5;
+  height: 100%;
 }
-
-.app-body {
+.unit-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
 }
-
 .content-area {
   flex: 1;
-  padding: 20px;
+  padding: 16px;
   overflow-y: auto;
 }
-
 .tab-content {
   height: 100%;
 }
-
 .chart-tab {
   display: flex;
   flex-direction: column;
 }
-
 .chart-card {
   flex: 1;
   display: flex;
   flex-direction: column;
 }
-
 .chart-card :deep(.el-card__body) {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .card-title {
   font-weight: 600;
 }
-
+.card-sub {
+  color: #909399;
+  font-size: 13px;
+}
+.level-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 .echarts-box {
   width: 100%;
   height: 440px;
 }
 </style>
+

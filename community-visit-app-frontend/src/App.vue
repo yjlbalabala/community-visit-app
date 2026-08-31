@@ -1,9 +1,5 @@
-<script setup lang="ts">
-import HouseGridPage from '@/pages/HouseGridPage.vue'
-</script>
-
 <template>
-  <HouseGridPage />
+  <router-view />
 </template>
 
 <style>

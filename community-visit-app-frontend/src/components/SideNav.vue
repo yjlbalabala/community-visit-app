@@ -40,10 +40,11 @@ const handleSelect = (index: string) => {
   flex-shrink: 0;
   background: #fff;
   border-right: 1px solid #e4e7ed;
-  min-height: calc(100vh - 56px);
+  height: 100%;
 }
 
 .nav-menu {
   border-right: none;
 }
 </style>
+
