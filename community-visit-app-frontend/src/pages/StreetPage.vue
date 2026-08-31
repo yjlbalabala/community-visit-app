@@ -45,6 +45,7 @@ const goZone = (node: TreeNode) => {
 }
 .level-card {
   height: 100%;
+  min-height: 660px;
   display: flex;
   flex-direction: column;
 }
@@ -53,7 +54,7 @@ const goZone = (node: TreeNode) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 520px;
+  min-height: 560px;
 }
 .level-header {
   display: flex;
@@ -68,3 +69,4 @@ const goZone = (node: TreeNode) => {
   font-size: 13px;
 }
 </style>
+

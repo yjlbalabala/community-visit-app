@@ -20,12 +20,15 @@ const hierarchyStore = useHierarchyStore()
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  min-height: 100vh;
   background: #f0f2f5;
 }
 .content-area {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 20px;
 }
 </style>
+

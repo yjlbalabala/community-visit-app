@@ -131,25 +131,32 @@ const renderChart = () => {
         const y = (floor - 1) * (cellHeight + gapY)
 
         return {
-          type: 'rect',
-          shape: { x, y, width: cellWidth, height: cellHeight },
-          style: {
-            fill: statusColorMap[item.status],
-            stroke: '#fff',
-            lineWidth: 2
-          },
-          textContent: {
-            type: 'text',
-            style: {
-              text: item.roomNo,
-              fill: '#fff',
-              fontSize: 16,
-              fontWeight: 'bold',
-              textAlign: 'center',
-              textVerticalAlign: 'middle'
+          type: 'group',
+          children: [
+            {
+              type: 'rect',
+              shape: { x, y, width: cellWidth, height: cellHeight },
+              style: {
+                fill: statusColorMap[item.status],
+                stroke: '#fff',
+                lineWidth: 2
+              }
+            },
+            {
+              type: 'text',
+              style: {
+                x: x + cellWidth / 2,
+                y: y + cellHeight / 2,
+                text: item.roomNo,
+                fill: '#fff',
+                fontSize: 16,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                textVerticalAlign: 'middle'
+              }
             }
-          }
-        }
+          ]
+        } as any
       },
       data
     }]
@@ -280,6 +287,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 100%;
 }
 .unit-body {
   display: flex;
@@ -288,6 +296,7 @@ onBeforeUnmount(() => {
 }
 .content-area {
   flex: 1;
+  min-height: 0;
   padding: 16px;
   overflow-y: auto;
 }
@@ -326,4 +335,5 @@ onBeforeUnmount(() => {
   height: 440px;
 }
 </style>
+
 
