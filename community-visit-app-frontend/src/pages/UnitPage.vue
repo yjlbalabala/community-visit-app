@@ -40,6 +40,14 @@
       v-model:visible="drawerVisible"
       :household="selectedHousehold"
       @edit="handleDrawerEdit"
+      @view-persons="handleViewPersons"
+    />
+
+    <!-- 人员管理弹窗 -->
+    <PersonListDialog
+      v-model:visible="personListVisible"
+      :household="selectedHousehold"
+      :location-label="personLocationLabel"
       @person-save="handlePersonSave"
       @person-remove="handlePersonRemove"
     />
@@ -68,6 +76,7 @@ import TodoPanel from '@/components/TodoPanel.vue'
 import OperationLog from '@/components/OperationLog.vue'
 import HouseDetailDrawer from '@/components/HouseDetailDrawer.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
+import PersonListDialog from '@/components/PersonListDialog.vue'
 
 // ─── 路由 & Stores ───────────────────────────────────────
 const route = useRoute()
@@ -78,6 +87,13 @@ const opLogStore = useOperationLogStore()
 const hierarchyStore = useHierarchyStore()
 
 const unitName = computed(() => hierarchyStore.currentNode?.name ?? '单元')
+
+/** 人员弹窗定位文案：责任区 · 小区 · 楼栋 · 房号 */
+const personLocationLabel = computed(() => {
+  const names = hierarchyStore.path.slice(1).map(n => n.name)
+  const room = selectedHousehold.value?.roomNo
+  return [...names, room].filter(Boolean).join(' · ')
+})
 
 // ─── 导航 ──────────────────────────────────────────────
 const activeTab = ref<NavTab>('chart')
@@ -203,6 +219,7 @@ watch(() => householdStore.list, () => {
 
 // ─── 抽屉 & 编辑对话框 ──────────────────────────────────
 const drawerVisible = ref(false)
+const personListVisible = ref(false)
 const dialogVisible = ref(false)
 const selectedHousehold = ref<Household | null>(null)
 const editingHousehold = ref<Household | null>(null)
@@ -212,6 +229,12 @@ const editSource = ref<'todo' | 'drawer'>('drawer')
 const openDrawer = (h: Household) => {
   selectedHousehold.value = h
   drawerVisible.value = true
+}
+
+/** 从抽屉打开「详细信息」→ 大号人员管理弹窗 */
+const handleViewPersons = (h: Household) => {
+  selectedHousehold.value = h
+  personListVisible.value = true
 }
 
 /** 抽屉内人员增删改后，若抽屉仍打开则同步最新对象 */
@@ -366,4 +389,5 @@ onBeforeUnmount(() => {
   height: 440px;
 }
 </style>
+
 

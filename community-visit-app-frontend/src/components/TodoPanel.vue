@@ -41,12 +41,11 @@
       </div>
 
       <div class="pagination-box" v-if="todoList.length > pageSize">
-        <el-pagination
+        <PaginationBar
+          :total="todoList.length"
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="todoList.length"
           layout="total, prev, pager, next"
-          background
           small
         />
       </div>
@@ -59,6 +58,7 @@ import { ref, computed } from 'vue'
 import type { HouseType, Household } from '@/types'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import { expectedVisitTime } from '@/utils/visitRule'
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const props = defineProps<{
   todoList: Household[]
@@ -168,3 +168,4 @@ const expectedTimeOf = (h: Household) => expectedVisitTime(h) ?? '—'
   justify-content: center;
 }
 </style>
+
