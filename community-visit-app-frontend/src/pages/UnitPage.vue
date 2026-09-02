@@ -40,6 +40,8 @@
       v-model:visible="drawerVisible"
       :household="selectedHousehold"
       @edit="handleDrawerEdit"
+      @person-save="handlePersonSave"
+      @person-remove="handlePersonRemove"
     />
 
     <!-- 编辑对话框 -->
@@ -55,10 +57,11 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
-import type { Household, HouseholdStatus } from '@/types'
+import type { Household, Person } from '@/types'
 import { useHouseholdStore } from '@/stores/household'
 import { useOperationLogStore } from '@/stores/operationLog'
 import { useHierarchyStore } from '@/stores/hierarchy'
+import { householdColor } from '@/utils/houseColor'
 import type { NavTab } from '@/components/SideNav.vue'
 import SideNav from '@/components/SideNav.vue'
 import TodoPanel from '@/components/TodoPanel.vue'
@@ -84,12 +87,6 @@ const chartRef = ref<HTMLDivElement | null>(null)
 let chartInstance: echarts.ECharts | null = null
 let resizeHandler: (() => void) | null = null
 
-const statusColorMap: Record<HouseholdStatus, string> = {
-  red: '#F53F3F',
-  yellow: '#FFAA00',
-  green: '#00B42A'
-}
-
 const renderChart = () => {
   if (!chartInstance) return
   const data = householdStore.list
@@ -105,15 +102,14 @@ const renderChart = () => {
       trigger: 'item',
       formatter: (params: any) => {
         const d = params.data as Household
-        const statusMap: Record<string, string> = {
-          red: '需上门走访', yellow: '需电话核实', green: '无需走访'
-        }
+        const over = d.persons.length > 8 ? '（超 8 人）' : ''
         return `
-          <div><b>${d.roomNo}</b></div>
-          <div>房东：${d.landlord}</div>
-          <div>状态：${statusMap[d.status]}</div>
-          <div>电话：${d.phone}</div>
-          <div>上次走访：${d.lastVisitTime}</div>
+          <div><b>${d.roomNo}</b><span style="color:#f56c6c;">${over}</span></div>
+          <div>房屋类别：${d.houseType}</div>
+          <div>居住人数：${d.persons.length} 人</div>
+          <div>房主：${d.landlord}</div>
+          <div>电话：${d.phone || '—'}</div>
+          <div>上次走访：${d.lastVisitTime || '从未走访'}</div>
         `
       }
     },
@@ -137,7 +133,7 @@ const renderChart = () => {
               type: 'rect',
               shape: { x, y, width: cellWidth, height: cellHeight },
               style: {
-                fill: statusColorMap[item.status],
+                fill: householdColor(item),
                 stroke: '#fff',
                 lineWidth: 2
               }
@@ -185,7 +181,7 @@ const initChart = async () => {
 
   // 点击事件：打开房屋详情抽屉
   chartInstance.on('click', (params: any) => {
-    if (params.data && params.data.roomNo) {
+    if (params.data && params.data.id) {
       openDrawer(params.data as Household)
     }
   })
@@ -195,9 +191,7 @@ const initChart = async () => {
 watch(activeTab, (tab) => {
   if (tab === 'chart') {
     nextTick(() => {
-      if (chartInstance) {
-        chartInstance.resize()
-      }
+      if (chartInstance) chartInstance.resize()
     })
   }
 })
@@ -212,26 +206,37 @@ const drawerVisible = ref(false)
 const dialogVisible = ref(false)
 const selectedHousehold = ref<Household | null>(null)
 const editingHousehold = ref<Household | null>(null)
+/** 编辑入口来源：todo=变更信息(记一次走访) / drawer=房屋编辑(不重置走访) */
+const editSource = ref<'todo' | 'drawer'>('drawer')
 
 const openDrawer = (h: Household) => {
   selectedHousehold.value = h
   drawerVisible.value = true
 }
 
+/** 抽屉内人员增删改后，若抽屉仍打开则同步最新对象 */
+const syncSelected = (updated: Household) => {
+  if (drawerVisible.value && selectedHousehold.value?.id === updated.id) {
+    selectedHousehold.value = updated
+  }
+}
+
 const handleDrawerEdit = (h: Household) => {
   drawerVisible.value = false
+  editSource.value = 'drawer'
   editingHousehold.value = h
   dialogVisible.value = true
 }
 
 const handleTodoEdit = (h: Household) => {
+  editSource.value = 'todo'
   editingHousehold.value = h
   dialogVisible.value = true
 }
 
 const handleTodoConfirm = async (h: Household) => {
-  // 仅标记待办已完成，不修改住户任何信息
-  householdStore.markTodoDone(h.roomNo)
+  const updated = await householdStore.confirmVisit(h.id)
+  syncSelected(updated)
   await opLogStore.addLog(
     h.roomNo,
     '确认走访',
@@ -239,27 +244,53 @@ const handleTodoConfirm = async (h: Household) => {
   )
 }
 
-const handleSave = async (roomNo: string, data: Partial<Household>) => {
-  const old = householdStore.findByRoomNo(roomNo)
-  if (!old) return
-
+const diffText = (oldH: Household, data: Partial<Household>): string => {
   const changed: string[] = []
-  for (const key of Object.keys(data) as (keyof Household)[]) {
-    if (data[key] !== undefined && data[key] !== old[key]) {
-      changed.push(`${key}: ${old[key]} → ${data[key]}`)
+  const keys: (keyof Household)[] = ['houseType', 'landlord', 'phone', 'remark', 'lastVisitTime']
+  for (const key of keys) {
+    if (data[key] !== undefined && data[key] !== oldH[key]) {
+      changed.push(`${key}: ${oldH[key] || '—'} → ${data[key]}`)
     }
   }
+  return changed.length > 0 ? changed.join('；') : '无字段变更'
+}
 
-  const finalData = { ...data, lastVisitTime: new Date().toLocaleString('zh-CN', { hour12: false }) }
+const handleSave = async (householdId: string, data: Partial<Household>) => {
+  const old = householdStore.findByHouseholdId(householdId)
+  if (!old) return
+  const changed = diffText(old, data)
 
-  await householdStore.edit(roomNo, finalData)
-  // 编辑即完成走访，标记待办已处理
-  householdStore.markTodoDone(roomNo)
+  // 从待办「变更信息」进入时视为完成一次走访，重置走访时间
+  const finalData = editSource.value === 'todo'
+    ? { ...data, lastVisitTime: new Date().toLocaleString('zh-CN', { hour12: false }) }
+    : data
+
+  const updated = await householdStore.updateHousehold(householdId, finalData)
+  syncSelected(updated)
   await opLogStore.addLog(
-    roomNo,
+    old.roomNo,
     '变更信息',
-    changed.length > 0 ? changed.join('；') : '无字段变更'
+    changed.length > 0 ? changed : '无字段变更'
   )
+}
+
+// ─── 人员 增删改查 ─────────────────────────────────────
+const handlePersonSave = async (householdId: string, person: Person) => {
+  const updated = person.id
+    ? await householdStore.updatePerson(householdId, person)
+    : await householdStore.addPerson(householdId, {
+        name: person.name,
+        gender: person.gender,
+        idCard: person.idCard,
+        phone: person.phone,
+        personType: person.personType
+      })
+  syncSelected(updated)
+}
+
+const handlePersonRemove = async (householdId: string, personId: string) => {
+  const updated = await householdStore.removePerson(householdId, personId)
+  syncSelected(updated)
 }
 
 // ─── 生命周期 ──────────────────────────────────────────
@@ -335,5 +366,4 @@ onBeforeUnmount(() => {
   height: 440px;
 }
 </style>
-
 

@@ -1,5 +1,11 @@
-/** 住户状态 */
-export type HouseholdStatus = 'red' | 'yellow' | 'green'
+/** 房屋类别（户级，决定单元格颜色） */
+export type HouseType = '自购房' | '出租房' | '群租房'
+
+/** 人员类别（统计口径：常住 / 寄住 / 流动） */
+export type PersonType = '常住人口' | '寄住人口' | '流动人口'
+
+/** 性别 */
+export type Gender = '男' | '女'
 
 /** 层级节点类型：街道 / 责任区 / 小区 / 单元 */
 export type NodeType = 'street' | 'zone' | 'community' | 'unit'
@@ -27,22 +33,42 @@ export interface TreeNode {
   summary: PopulationSummary
 }
 
+/** 住户内的人员（一户可多人，与后端 Person 表对齐） */
+export interface Person {
+  id: string
+  householdId: string
+  /** 住户姓名 */
+  name: string
+  /** 住户性别 */
+  gender: Gender
+  /** 身份证号码（18 位，全局唯一标识） */
+  idCard: string
+  /** 手机号码 */
+  phone: string
+  /** 人员类别 */
+  personType: PersonType
+}
+
 /** 住户信息 — 与后端 HouseholdDTO 对齐 */
 export interface Household {
+  id: string
   /** 所属单元 id */
   unitId: string
   roomNo: string
   floor: number
   door: number
-  status: HouseholdStatus
+  /** 房屋类别：自购房 / 出租房 / 群租房（决定单元格颜色） */
+  houseType: HouseType
+  /** 房主（默认取首位人员） */
   landlord: string
+  /** 联系电话 */
   phone: string
-  userType: string
-  houseType: string
-  /** 居住人数（用于人口统计） */
-  memberCount: number
-  lastVisitTime: string
+  /** 情况说明 / 走访备注 */
   remark: string
+  /** 上次走访时间（空串 = 从未走访） */
+  lastVisitTime: string
+  /** 该户全部人员 */
+  persons: Person[]
 }
 
 /** 操作类别 */

@@ -10,17 +10,20 @@
       <div class="todo-list">
         <div
           v-for="item in pagedTodos"
-          :key="item.roomNo"
+          :key="item.id"
           class="todo-item"
         >
           <div class="todo-item__info">
             <div class="todo-item__header">
               <el-tag type="danger" size="small">{{ item.roomNo }}</el-tag>
+              <el-tag :type="houseTagType(item.houseType)" size="small">{{ item.houseType }}</el-tag>
               <span class="todo-item__name">{{ item.landlord }}</span>
+              <span class="todo-item__count">{{ item.persons.length }} 人</span>
             </div>
             <div class="todo-item__meta">
-              <span>电话：{{ item.phone }}</span>
-              <span>上次走访：{{ item.lastVisitTime }}</span>
+              <span>电话：{{ item.phone || '—' }}</span>
+              <span>上次走访：{{ item.lastVisitTime || '从未走访' }}</span>
+              <span>预计走访：{{ expectedTimeOf(item) }}</span>
             </div>
             <div class="todo-item__remark" v-if="item.remark">
               {{ item.remark }}
@@ -31,7 +34,7 @@
               变更信息
             </el-button>
             <el-button size="small" type="success" @click="$emit('confirm', item)">
-              确定
+              确认走访
             </el-button>
           </div>
         </div>
@@ -53,7 +56,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { Household } from '@/types'
+import type { HouseType, Household } from '@/types'
+import { HOUSE_TAG_MAP } from '@/utils/houseColor'
+import { expectedVisitTime } from '@/utils/visitRule'
 
 const props = defineProps<{
   todoList: Household[]
@@ -71,6 +76,9 @@ const pagedTodos = computed(() => {
   const start = (currentPage.value - 1) * pageSize
   return props.todoList.slice(start, start + pageSize)
 })
+
+const houseTagType = (t: HouseType) => HOUSE_TAG_MAP[t] || 'info'
+const expectedTimeOf = (h: Household) => expectedVisitTime(h) ?? '—'
 </script>
 
 <style scoped>
@@ -125,6 +133,11 @@ const pagedTodos = computed(() => {
 
 .todo-item__name {
   font-weight: 500;
+}
+
+.todo-item__count {
+  color: #909399;
+  font-size: 12px;
 }
 
 .todo-item__meta {

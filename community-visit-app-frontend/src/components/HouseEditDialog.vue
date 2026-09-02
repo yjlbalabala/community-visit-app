@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="visible"
     @update:model-value="$emit('update:visible', $event)"
-    title="编辑住户信息"
+    title="编辑房屋信息"
     width="520px"
     :close-on-click-modal="false"
   >
@@ -17,35 +17,20 @@
         <el-input :model-value="household.roomNo" disabled />
       </el-form-item>
 
-      <el-form-item label="状态" prop="status">
-        <el-select v-model="form.status" style="width: 100%">
-          <el-option label="🔴 需上门走访" value="red" />
-          <el-option label="🟡 需电话核实" value="yellow" />
-          <el-option label="🟢 无需走访" value="green" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="房东" prop="landlord">
-        <el-input v-model="form.landlord" placeholder="请输入房东姓名" />
-      </el-form-item>
-
-      <el-form-item label="电话" prop="phone">
-        <el-input v-model="form.phone" placeholder="请输入联系电话" />
-      </el-form-item>
-
-      <el-form-item label="住户性质" prop="userType">
-        <el-select v-model="form.userType" style="width: 100%">
-          <el-option label="常住居民" value="常住居民" />
-          <el-option label="租户" value="租户" />
-          <el-option label="空置" value="空置" />
-        </el-select>
-      </el-form-item>
-
-      <el-form-item label="住房类别" prop="houseType">
+      <el-form-item label="房屋类别" prop="houseType">
         <el-select v-model="form.houseType" style="width: 100%">
-          <el-option label="商品房" value="商品房" />
-          <el-option label="公租房" value="公租房" />
+          <el-option label="🟢 自购房" value="自购房" />
+          <el-option label="🟡 出租房" value="出租房" />
+          <el-option label="🔴 群租房" value="群租房" />
         </el-select>
+      </el-form-item>
+
+      <el-form-item label="房主" prop="landlord">
+        <el-input v-model="form.landlord" placeholder="请输入房主姓名" />
+      </el-form-item>
+
+      <el-form-item label="联系电话" prop="phone">
+        <el-input v-model="form.phone" placeholder="请输入联系电话" />
       </el-form-item>
 
       <el-form-item label="情况说明" prop="remark">
@@ -70,7 +55,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { Household, HouseholdStatus } from '@/types'
+import type { Household, HouseType } from '@/types'
 
 const props = defineProps<{
   visible: boolean
@@ -79,40 +64,34 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  save: [roomNo: string, data: Partial<Household>]
+  save: [householdId: string, data: Partial<Household>]
 }>()
 
 const formRef = ref<FormInstance>()
 const saving = ref(false)
 
 const form = reactive({
-  status: 'green' as HouseholdStatus,
+  houseType: '自购房' as HouseType,
   landlord: '',
   phone: '',
-  userType: '常住居民',
-  houseType: '商品房',
   remark: ''
 })
 
 const rules: FormRules = {
-  status: [{ required: true, message: '请选择状态', trigger: 'change' }],
-  landlord: [{ required: true, message: '请输入房东姓名', trigger: 'blur' }],
+  houseType: [{ required: true, message: '请选择房屋类别', trigger: 'change' }],
+  landlord: [{ required: true, message: '请输入房主姓名', trigger: 'blur' }],
   phone: [
-    { required: true, message: '请输入电话', trigger: 'blur' },
+    { required: true, message: '请输入联系电话', trigger: 'blur' },
     { pattern: /^1\d{10}$/, message: '请输入正确的手机号', trigger: 'blur' }
-  ],
-  userType: [{ required: true, message: '请选择住户性质', trigger: 'change' }],
-  houseType: [{ required: true, message: '请选择住房类别', trigger: 'change' }]
+  ]
 }
 
 // 打开编辑框时回填数据
 watch(() => props.household, (h) => {
   if (h) {
-    form.status = h.status
+    form.houseType = h.houseType
     form.landlord = h.landlord
     form.phone = h.phone
-    form.userType = h.userType
-    form.houseType = h.houseType
     form.remark = h.remark
   }
 }, { immediate: true })
@@ -123,7 +102,7 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    emit('save', props.household!.roomNo, { ...form })
+    emit('save', props.household!.id, { ...form })
     emit('update:visible', false)
   } finally {
     saving.value = false

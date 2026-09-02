@@ -1,4 +1,4 @@
-import type { Household, HouseholdStatus, TreeNode } from '@/types'
+import type { Gender, HouseType, Household, Person, PersonType, TreeNode } from '@/types'
 
 // ─── 确定性伪随机（种子可复现，保证刷新后数据稳定） ──────────────
 
@@ -24,15 +24,14 @@ function mulberry32(seed: number): () => number {
 
 const rngFor = (seed: string): (() => number) => mulberry32(hashString(seed))
 
-/** 按权重取一个值（权重数组需按累计概率升序） */
+/** 按权重取一个值（权重数组累计概率约为 1） */
 function pickWeighted<T>(rng: () => number, weights: Array<[T, number]>): T {
   let r = rng()
   for (const [value, w] of weights) {
     if (r < w) return value
     r -= w
   }
-  const last = weights[weights.length - 1]
-  return last ? last[0] : (weights[0] ? weights[0][0] : (undefined as unknown as T))
+  return (weights[weights.length - 1]?.[0] ?? (weights[0]?.[0] as T))
 }
 
 // ─── 常量池 ────────────────────────────────────────────────
@@ -62,24 +61,24 @@ const givenNames = [
   '晓东', '艳芬', '志远', '雪琴', '永强', '晓燕', '雪峰', '丽华', '志明', '雅婷'
 ]
 
-// 状态权重：红 15% / 黄 30% / 绿 55%（红色=需走访，数量适中，避免待办过多）
-const STATUS_WEIGHTS: Array<[HouseholdStatus, number]> = [
-  ['red', 0.15], ['yellow', 0.3], ['green', 0.55]
+// 房屋类别权重：自购房 / 出租房 / 群租房
+const HOUSE_TYPE_WEIGHTS: Array<[HouseType, number]> = [
+  ['自购房', 0.62], ['出租房', 0.32], ['群租房', 0.06]
 ]
 
-// 住户性质权重：常住 / 租户（流动）/ 寄住 / 空置
-const USER_TYPE_WEIGHTS: Array<[string, number]> = [
-  ['常住居民', 0.55], ['租户', 0.3], ['寄住', 0.1], ['空置', 0.05]
-]
+/** 各房屋类别下居住人数分布（0 = 空户，群租房人数较多） */
+const PERSON_COUNT_WEIGHTS: Record<HouseType, Array<[number, number]>> = {
+  自购房: [[0, 0.05], [1, 0.12], [2, 0.34], [3, 0.30], [4, 0.13], [5, 0.04], [6, 0.02]],
+  出租房: [[0, 0.03], [1, 0.10], [2, 0.31], [3, 0.31], [4, 0.16], [5, 0.05], [6, 0.02], [7, 0.012], [8, 0.005], [9, 0.002], [10, 0.001]],
+  群租房: [[5, 0.06], [6, 0.12], [7, 0.16], [8, 0.18], [9, 0.18], [10, 0.14], [11, 0.10], [12, 0.06]]
+}
 
-const HOUSE_TYPE_WEIGHTS: Array<[string, number]> = [
-  ['商品房', 0.7], ['公租房', 0.3]
-]
-
-// 居住人数权重（1-5 人，加权平均约 3.1，使全街道总人口落在 14~15 万）
-const MEMBER_WEIGHTS: Array<[number, number]> = [
-  [1, 0.06], [2, 0.26], [3, 0.32], [4, 0.24], [5, 0.12]
-]
+/** 各房屋类别下人员类别分布（与统计口径一致） */
+const PERSON_TYPE_WEIGHTS: Record<HouseType, Array<[PersonType, number]>> = {
+  自购房: [['常住人口', 0.90], ['寄住人口', 0.07], ['流动人口', 0.03]],
+  出租房: [['流动人口', 0.55], ['常住人口', 0.25], ['寄住人口', 0.20]],
+  群租房: [['流动人口', 0.60], ['常住人口', 0.20], ['寄住人口', 0.20]]
+}
 
 // ─── 单元内住户的确定性生成 ───────────────────────────────
 
@@ -96,62 +95,113 @@ export function getUnitLayout(unitId: string): UnitLayout {
   return { floors, doors }
 }
 
-/** 只做统计所需的三项抽取（与 rollHousehold 前 4 个随机数消费顺序一致） */
-function rollSummary(unitId: string, idx: number): { status: HouseholdStatus; userType: string; memberCount: number } {
-  const rng = rngFor(`h:${unitId}:${idx}`)
-  const status = pickWeighted(rng, STATUS_WEIGHTS)
-  const userType = pickWeighted(rng, USER_TYPE_WEIGHTS)
-  pickWeighted(rng, HOUSE_TYPE_WEIGHTS) // 消费与完整生成一致的随机数
-  const memberCount = userType === '空置' ? 0 : pickWeighted(rng, MEMBER_WEIGHTS)
-  return { status, userType, memberCount }
-}
+const roomNoOf = (floor: number, door: number): string => `${floor}0${door}`
 
-function getRemark(status: HouseholdStatus, rng: () => number): string {
-  if (status === 'red') {
-    const remarks = [
-      '独居老人，需定期走访', '家庭情况复杂，需上门走访', '家庭纠纷，需重点关注',
-      '存在安全隐患，需立即走访', '独居老人，健康状况需关注', '多次投诉，需上门了解',
-      '新入住，信息待核实', '疑似群租，需现场查看'
-    ]
-    return remarks[Math.floor(rng() * remarks.length)] ?? '需走访'
-  }
-  if (status === 'yellow') return '信息可能过期，需电话核实'
-  return '正常居住，无特殊情况'
-}
-
-/** 生成某单元下的一户（idx 从 0 开始，按楼层×门牌顺序排列） */
-function rollHousehold(unitId: string, idx: number, floors: number, doors: number): Household {
-  const rng = rngFor(`h:${unitId}:${idx}`)
-  const status = pickWeighted(rng, STATUS_WEIGHTS)
-  const userType = pickWeighted(rng, USER_TYPE_WEIGHTS)
+/** 房屋形态（房屋类别 + 居住人数），summary 与完整生成共用同一随机序列 */
+function rollShape(unitId: string, idx: number): { houseType: HouseType; personCount: number } {
+  const rng = rngFor(`hs:${unitId}:${idx}`)
   const houseType = pickWeighted(rng, HOUSE_TYPE_WEIGHTS)
-  const memberCount = userType === '空置' ? 0 : pickWeighted(rng, MEMBER_WEIGHTS)
+  const personCount = pickWeighted(rng, PERSON_COUNT_WEIGHTS[houseType])
+  return { houseType, personCount }
+}
 
+function pickPersonType(unitId: string, idx: number, j: number, houseType: HouseType): PersonType {
+  const rng = rngFor(`pt:${unitId}:${idx}:${j}`)
+  return pickWeighted(rng, PERSON_TYPE_WEIGHTS[houseType])
+}
+
+function genIdCard(unitId: string, idx: number, j: number): string {
+  const rng = rngFor(`ic:${unitId}:${idx}:${j}`)
+  const year = 1940 + Math.floor(rng() * 73) // 1940-2012
+  const month = 1 + Math.floor(rng() * 12)
+  const day = 1 + Math.floor(rng() * 28)
+  const birth = `${year}${String(month).padStart(2, '0')}${String(day).padStart(2, '0')}`
+  const seq = String(Math.floor(rng() * 1000)).padStart(3, '0')
+  const check = '0123456789X'[Math.floor(rng() * 11)] ?? '0'
+  return `320113${birth}${seq}${check}`
+}
+
+function genPhone(unitId: string, idx: number, j: number): string {
+  const rng = rngFor(`ph:${unitId}:${idx}:${j}`)
+  const head = '135789'[Math.floor(rng() * 5)] ?? '1'
+  return `1${head}${Array.from({ length: 9 }, () => Math.floor(rng() * 10)).join('')}`
+}
+
+function rollPerson(unitId: string, idx: number, j: number, householdId: string, houseType: HouseType): Person {
+  const typeRng = rngFor(`pt:${unitId}:${idx}:${j}`)
+  const genderRng = rngFor(`g:${unitId}:${idx}:${j}`)
+  const nameRng = rngFor(`nm:${unitId}:${idx}:${j}`)
+  const surname = surnames[Math.floor(nameRng() * surnames.length)] ?? '王'
+  const given = givenNames[Math.floor(nameRng() * givenNames.length)] ?? '伟'
+  const personType = pickWeighted(typeRng, PERSON_TYPE_WEIGHTS[houseType])
+  const gender: Gender = genderRng() < 0.5 ? '男' : '女'
+  return {
+    id: `${householdId}-p${j + 1}`,
+    householdId,
+    name: `${surname}${given}`,
+    gender,
+    idCard: genIdCard(unitId, idx, j),
+    phone: genPhone(unitId, idx, j),
+    personType
+  }
+}
+
+function remarkOf(houseType: HouseType, personCount: number): string {
+  if (personCount === 0) return '空户，暂无登记人员'
+  const base = houseType === '群租房' ? '群租房，人员较多，重点关注'
+    : houseType === '出租房' ? '出租房，需按 3 个月周期走访核实'
+    : '自购房，正常居住'
+  return personCount > 8 ? `${base}；居住人数超 8，需重点关注` : base
+}
+
+function lastVisitOf(unitId: string, idx: number, personCount: number): string {
+  if (personCount === 0) return ''
+  const rng = rngFor(`lv:${unitId}:${idx}`)
+  // 偏近期的天数分布（0-400 天前），保证按走访规则演示时各楼都有合理待办
+  const daysAgo = Math.floor(Math.pow(rng(), 2) * 400)
+  const d = new Date(Date.now() - daysAgo * 24 * 3600 * 1000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const hour = 8 + Math.floor(rng() * 11)
+  const minute = Math.floor(rng() * 60)
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(hour)}:${p(minute)}:00`
+}
+
+function rollHousehold(unitId: string, idx: number, floors: number, doors: number): Household {
+  const { houseType, personCount } = rollShape(unitId, idx)
+  const householdId = `${unitId}-hh${idx}`
+  const persons: Person[] = []
+  for (let j = 0; j < personCount; j++) {
+    persons.push(rollPerson(unitId, idx, j, householdId, houseType))
+  }
   const floor = Math.floor(idx / doors) + 1
   const door = (idx % doors) + 1
-  const roomNo = `${floor}0${door}`
-
-  const surname = surnames[Math.floor(rng() * surnames.length)] ?? '王'
-  const given = givenNames[Math.floor(rng() * givenNames.length)] ?? '伟'
-  const phone = `13${String(8 + Math.floor(rng() * 2))}${Array.from({ length: 8 }, () => Math.floor(rng() * 10)).join('')}`
-  const lastVisitTime =
-    `2026-${String(1 + Math.floor(rng() * 8)).padStart(2, '0')}-${String(1 + Math.floor(rng() * 28)).padStart(2, '0')}` +
-    ` ${String(8 + Math.floor(rng() * 12)).padStart(2, '0')}:${String(Math.floor(rng() * 60)).padStart(2, '0')}:00`
-
+  const first = persons[0]
   return {
+    id: householdId,
     unitId,
-    roomNo,
+    roomNo: roomNoOf(floor, door),
     floor,
     door,
-    status,
-    landlord: `${surname}${given}`,
-    phone,
-    userType,
     houseType,
-    memberCount,
-    lastVisitTime,
-    remark: getRemark(status, rng)
+    landlord: first?.name ?? '未登记',
+    phone: first?.phone ?? '',
+    remark: remarkOf(houseType, personCount),
+    lastVisitTime: lastVisitOf(unitId, idx, personCount),
+    persons
   }
+}
+
+/** 仅统计用：返回该户 常住/流动/寄住 人口数（与完整生成一致） */
+function rollSummary(unitId: string, idx: number): { permanent: number; floating: number; stay: number } {
+  const { houseType, personCount } = rollShape(unitId, idx)
+  const sum = { permanent: 0, floating: 0, stay: 0 }
+  for (let j = 0; j < personCount; j++) {
+    const t = pickPersonType(unitId, idx, j, houseType)
+    if (t === '常住人口') sum.permanent++
+    else if (t === '流动人口') sum.floating++
+    else sum.stay++
+  }
+  return sum
 }
 
 // ─── 层级树构建 ─────────────────────────────────────────────
@@ -160,17 +210,15 @@ function emptySummary() {
   return { householdCount: 0, permanentPop: 0, floatingPop: 0, stayPop: 0 }
 }
 
-function addPop(summary: ReturnType<typeof emptySummary>, userType: string, memberCount: number) {
-  if (userType === '常住居民') summary.permanentPop += memberCount
-  else if (userType === '租户') summary.floatingPop += memberCount
-  else if (userType === '寄住') summary.stayPop += memberCount
-}
-
-function mergeSummary(target: ReturnType<typeof emptySummary>, source: ReturnType<typeof emptySummary>) {
+function addSummary(target: ReturnType<typeof emptySummary>, source: ReturnType<typeof emptySummary>) {
   target.householdCount += source.householdCount
   target.permanentPop += source.permanentPop
   target.floatingPop += source.floatingPop
   target.stayPop += source.stayPop
+}
+
+function mergeSummary(target: ReturnType<typeof emptySummary>, source: ReturnType<typeof emptySummary>) {
+  addSummary(target, source)
 }
 
 interface BuiltTree {
@@ -181,7 +229,6 @@ interface BuiltTree {
 }
 
 function buildTree(): BuiltTree {
-  const nodeMap = new Map<string, TreeNode>()
   const zones: TreeNode[] = []
   const communitiesByZone = new Map<string, TreeNode[]>()
   const unitsByCommunity = new Map<string, TreeNode[]>()
@@ -194,7 +241,6 @@ function buildTree(): BuiltTree {
     childCount: ZONE_NAMES.length,
     summary: emptySummary()
   }
-  nodeMap.set(street.id, street)
 
   ZONE_NAMES.forEach((zoneName, zi) => {
     const zoneId = `zone-${zi}`
@@ -206,7 +252,6 @@ function buildTree(): BuiltTree {
       childCount: 0,
       summary: emptySummary()
     }
-    nodeMap.set(zone.id, zone)
 
     const zoneRng = rngFor(`zone:${zoneId}`)
     const communityCount = 6 + Math.floor(zoneRng() * 6) // 6-11 个小区
@@ -223,7 +268,6 @@ function buildTree(): BuiltTree {
         childCount: 0,
         summary: emptySummary()
       }
-      nodeMap.set(comm.id, comm)
 
       const commRng = rngFor(`community:${commId}`)
       const unitCount = 14 + Math.floor(commRng() * 11) // 14-24 个单元
@@ -239,14 +283,15 @@ function buildTree(): BuiltTree {
           childCount: 0,
           summary: emptySummary()
         }
-        nodeMap.set(unit.id, unit)
 
         const { floors, doors } = getUnitLayout(unitId)
         const householdCount = floors * doors
         for (let idx = 0; idx < householdCount; idx++) {
           const s = rollSummary(unitId, idx)
           unit.summary.householdCount += 1
-          addPop(unit.summary, s.userType, s.memberCount)
+          unit.summary.permanentPop += s.permanent
+          unit.summary.floatingPop += s.floating
+          unit.summary.stayPop += s.stay
         }
         unit.childCount = unit.summary.householdCount
 
@@ -269,7 +314,7 @@ function buildTree(): BuiltTree {
   return { street, zones, communitiesByZone, unitsByCommunity }
 }
 
-// ─── 对外暴露的 Mock 数据 ──────────────────────────────────
+// ─── 对外暴露的层级 Mock 数据 ──────────────────────────────
 
 const tree = buildTree()
 const nodeMap = new Map<string, TreeNode>()
@@ -316,6 +361,10 @@ export function findMockPath(id: string): TreeNode[] {
 
 const householdCache = new Map<string, Household[]>()
 
+function cloneHousehold(h: Household): Household {
+  return { ...h, persons: h.persons.map(p => ({ ...p })) }
+}
+
 export function getUnitHouseholds(unitId: string): Household[] {
   let list = householdCache.get(unitId)
   if (!list) {
@@ -327,14 +376,87 @@ export function getUnitHouseholds(unitId: string): Household[] {
   return list
 }
 
-export function updateUnitHousehold(unitId: string, roomNo: string, data: Partial<Household>): Household {
-  const list = getUnitHouseholds(unitId)
-  const idx = list.findIndex(h => h.roomNo === roomNo)
-  if (idx === -1) throw new Error(`未找到住户 ${roomNo}`)
-  list[idx] = { ...list[idx], ...data } as Household
-  return { ...list[idx] }
+function findHousehold(unitId: string, householdId: string): Household {
+  const h = getUnitHouseholds(unitId).find(x => x.id === householdId)
+  if (!h) throw new Error(`未找到住户 ${householdId}`)
+  return h
 }
 
+export function updateUnitHousehold(unitId: string, householdId: string, data: Partial<Household>): Household {
+  const list = getUnitHouseholds(unitId)
+  const idx = list.findIndex(h => h.id === householdId)
+  if (idx === -1) throw new Error(`未找到住户 ${householdId}`)
+  const h = list[idx]!
+  list[idx] = { ...h, ...data, persons: h.persons }
+  return cloneHousehold(list[idx]!)
+}
+
+/** 确认走访完成：更新上次走访时间为当前时间 */
+export function confirmUnitVisit(unitId: string, householdId: string): Household {
+  const list = getUnitHouseholds(unitId)
+  const idx = list.findIndex(h => h.id === householdId)
+  if (idx === -1) throw new Error(`未找到住户 ${householdId}`)
+  const h = list[idx]!
+  const now = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  const ts = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`
+  list[idx] = { ...h, lastVisitTime: ts }
+  return cloneHousehold(list[idx]!)
+}
+
+/** 新增人员；若该户此前无登记，则自动把房主/电话设为新增人员 */
+export function addUnitPerson(unitId: string, householdId: string, person: Omit<Person, 'id' | 'householdId'>): Household {
+  const list = getUnitHouseholds(unitId)
+  const idx = list.findIndex(h => h.id === householdId)
+  if (idx === -1) throw new Error(`未找到住户 ${householdId}`)
+  const h = list[idx]!
+  const newPerson: Person = {
+    ...person,
+    id: `${householdId}-p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    householdId
+  }
+  const persons = [...h.persons, newPerson]
+  const landlord = h.persons.length === 0 ? newPerson.name : h.landlord
+  const phone = h.persons.length === 0 ? newPerson.phone : h.phone
+  list[idx] = { ...h, persons, landlord, phone, remark: remarkOf(h.houseType, persons.length) }
+  return cloneHousehold(list[idx]!)
+}
+
+export function updateUnitPerson(unitId: string, householdId: string, personId: string, data: Partial<Person>): Household {
+  const list = getUnitHouseholds(unitId)
+  const idx = list.findIndex(h => h.id === householdId)
+  if (idx === -1) throw new Error(`未找到住户 ${householdId}`)
+  const h = list[idx]!
+  const pi = h.persons.findIndex(p => p.id === personId)
+  if (pi === -1) throw new Error(`未找到人员 ${personId}`)
+  const persons = h.persons.map(p => (p.id === personId ? { ...p, ...data } : p))
+  list[idx] = { ...h, persons }
+  return cloneHousehold(list[idx]!)
+}
+
+export function removeUnitPerson(unitId: string, householdId: string, personId: string): Household {
+  const list = getUnitHouseholds(unitId)
+  const idx = list.findIndex(h => h.id === householdId)
+  if (idx === -1) throw new Error(`未找到住户 ${householdId}`)
+  const h = list[idx]!
+  const persons = h.persons.filter(p => p.id !== personId)
+
+  let landlord = h.landlord
+  let phone = h.phone
+  if (persons.length === 0) {
+    // 人员清空 → 空户
+    landlord = '未登记'
+    phone = ''
+  } else if (landlord === '未登记' || !persons.some(p => p.name === landlord)) {
+    // 房主被删除或未登记 → 由首位人员接管房主/电话
+    const first = persons[0]!
+    landlord = first.name
+    phone = first.phone
+  }
+
+  list[idx] = { ...h, persons, landlord, phone, remark: remarkOf(h.houseType, persons.length) }
+  return cloneHousehold(list[idx]!)
+}
 
 
 
