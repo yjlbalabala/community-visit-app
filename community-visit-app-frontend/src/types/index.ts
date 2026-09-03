@@ -78,6 +78,10 @@ export type OperationType = '变更信息' | '确认走访'
 export interface OperationLog {
   id: string
   roomNo: string
+  /** 完整位置：责任区 / 小区 / 单元（可选，旧数据可能为空） */
+  zoneName?: string
+  communityName?: string
+  unitName?: string
   operationType: OperationType
   /** JSON 字符串：变更前后的字段对比 */
   changesDetail: string
@@ -90,3 +94,4 @@ export interface ApiResponse<T> {
   message: string
   data: T
 }
+

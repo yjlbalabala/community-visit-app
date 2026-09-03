@@ -10,7 +10,11 @@
         class="log-table"
       >
         <el-table-column prop="operatedAt" label="操作时间" width="170" />
-        <el-table-column prop="roomNo" label="房号" width="80" />
+        <el-table-column label="住户位置" min-width="260">
+          <template #default="{ row }">
+            <span>{{ locationText(row) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="operationType" label="操作类别" width="110">
           <template #default="{ row }">
             <el-tag
@@ -30,12 +34,11 @@
       </el-table>
 
       <div class="pagination-box" v-if="logs.length > pageSize">
-        <el-pagination
+        <PaginationBar
+          :total="logs.length"
           v-model:current-page="currentPage"
           :page-size="pageSize"
-          :total="logs.length"
           layout="total, prev, pager, next"
-          background
           small
         />
       </div>
@@ -60,6 +63,12 @@ const props = defineProps<{
 
 const currentPage = ref(1)
 const pageSize = 10
+
+/** 完整位置：责任区 · 小区 · 单元 · 房号 */
+const locationText = (row: OperationLog) =>
+  [row.zoneName, row.communityName, row.unitName, row.roomNo].filter(Boolean).join(' · ')
+
+import PaginationBar from '@/components/PaginationBar.vue'
 
 const pagedLogs = computed(() => {
   const start = (currentPage.value - 1) * pageSize
@@ -98,3 +107,5 @@ const pagedLogs = computed(() => {
   justify-content: center;
 }
 </style>
+
+

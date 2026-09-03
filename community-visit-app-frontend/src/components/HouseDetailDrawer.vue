@@ -31,6 +31,9 @@
         <el-button type="primary" :icon="User" @click="$emit('view-persons', household)">
           详细信息（查看人员）
         </el-button>
+        <el-button type="success" plain :icon="CircleCheck" @click="$emit('confirm-visit', household)">
+          确认走访
+        </el-button>
         <el-button :icon="Edit" @click="$emit('edit', household)">
           编辑房屋信息
         </el-button>
@@ -43,7 +46,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Edit, User } from '@element-plus/icons-vue'
+import { CircleCheck, Edit, User } from '@element-plus/icons-vue'
 import type { Household } from '@/types'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import { expectedVisitTime } from '@/utils/visitRule'
@@ -56,6 +59,7 @@ const props = defineProps<{
 defineEmits<{
   'update:visible': [value: boolean]
   edit: [household: Household]
+  'confirm-visit': [household: Household]
   'view-persons': [household: Household]
 }>()
 
@@ -82,3 +86,4 @@ const expectedTime = computed(() => (props.household ? expectedVisitTime(props.h
   flex-wrap: wrap;
 }
 </style>
+

@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { OperationLog, OperationType } from '@/types'
-import { fetchOperationLogs, addOperationLog } from '@/api/operationLog'
+import type { OperationLog } from '@/types'
+import { fetchOperationLogs, addOperationLog, type OperationLogInput } from '@/api/operationLog'
 
 export const useOperationLogStore = defineStore('operationLog', () => {
   const logs = ref<OperationLog[]>([])
@@ -24,14 +24,14 @@ export const useOperationLogStore = defineStore('operationLog', () => {
     }
   }
 
-  /** 新增操作记录 */
-  async function addLog(roomNo: string, operationType: OperationType, changesDetail: string) {
+  /** 新增操作记录（携带完整位置） */
+  async function addLog(input: OperationLogInput) {
     loading.value = true
     error.value = null
     try {
-      const entry = await addOperationLog(roomNo, operationType, changesDetail)
+      const entry = await addOperationLog(input)
       logs.value.unshift(entry)
-      ElMessage.success(`${operationType}操作记录已保存`)
+      ElMessage.success(`${input.operationType}操作记录已保存`)
     } catch (e: any) {
       const msg = e?.message || '添加操作记录失败'
       error.value = msg
@@ -44,3 +44,5 @@ export const useOperationLogStore = defineStore('operationLog', () => {
 
   return { logs, loading, error, loadLogs, addLog }
 })
+
+

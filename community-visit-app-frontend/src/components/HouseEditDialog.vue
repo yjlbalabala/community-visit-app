@@ -55,16 +55,27 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import type { Household, HouseType } from '@/types'
+import type { HouseType } from '@/types'
+
+/** 编辑表单所需的房屋字段（完整 Household 或待办条目均可满足） */
+export interface HouseFormSource {
+  /** 住户 id（完整 Household 或 TodoItem 构建对象均携带） */
+  id?: string
+  roomNo: string
+  houseType: HouseType
+  landlord: string
+  phone: string
+  remark: string
+}
 
 const props = defineProps<{
   visible: boolean
-  household: Household | null
+  household: HouseFormSource | null
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
-  save: [householdId: string, data: Partial<Household>]
+  save: [householdId: string, data: Partial<HouseFormSource>]
 }>()
 
 const formRef = ref<FormInstance>()
@@ -102,10 +113,12 @@ const handleSave = async () => {
 
   saving.value = true
   try {
-    emit('save', props.household!.id, { ...form })
+    emit('save', props.household!.id ?? '', { ...form })
     emit('update:visible', false)
   } finally {
     saving.value = false
   }
 }
 </script>
+
+

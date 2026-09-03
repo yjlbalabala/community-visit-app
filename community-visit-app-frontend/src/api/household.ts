@@ -20,6 +20,17 @@ export async function fetchHouseholds(unitId: string): Promise<Household[]> {
   return res.data as Household[]
 }
 
+/** 获取某单元下某一户（深拷贝） */
+export async function fetchHousehold(unitId: string, householdId: string): Promise<Household> {
+  if (USE_MOCK) {
+    const h = getUnitHouseholds(unitId).find(x => x.id === householdId)
+    if (!h) throw new Error(`未找到住户 ${householdId}`)
+    return { ...h, persons: h.persons.map(p => ({ ...p })) }
+  }
+  const res: any = await apiClient.get(`/households/${householdId}`)
+  return res.data as Household
+}
+
 /** 修改住户（房屋类别/房主/电话/情况说明等） */
 export async function updateHousehold(unitId: string, householdId: string, data: Partial<Household>): Promise<Household> {
   if (USE_MOCK) return updateUnitHousehold(unitId, householdId, data)
@@ -54,3 +65,4 @@ export async function removePerson(unitId: string, householdId: string, personId
   const res: any = await apiClient.delete(`/households/${householdId}/persons/${personId}`)
   return res.data as Household
 }
+

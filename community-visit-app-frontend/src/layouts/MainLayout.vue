@@ -1,16 +1,22 @@
 <template>
   <div class="app-shell">
     <HeaderBar />
-    <BreadcrumbNav :path="hierarchyStore.path" />
-    <main class="content-area">
-      <router-view />
-    </main>
+    <BreadcrumbNav v-if="hierarchyStore.path.length > 0" :path="hierarchyStore.path" />
+
+    <div class="app-body">
+      <!-- 全局左侧导航（所有层级常驻） -->
+      <SystemNav />
+      <main class="content-area">
+        <router-view />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import HeaderBar from '@/components/HeaderBar.vue'
 import BreadcrumbNav from '@/components/BreadcrumbNav.vue'
+import SystemNav from '@/components/SystemNav.vue'
 import { useHierarchyStore } from '@/stores/hierarchy'
 
 const hierarchyStore = useHierarchyStore()
@@ -24,6 +30,11 @@ const hierarchyStore = useHierarchyStore()
   min-height: 100vh;
   background: #f0f2f5;
 }
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
 .content-area {
   flex: 1;
   min-height: 0;
@@ -31,4 +42,3 @@ const hierarchyStore = useHierarchyStore()
   padding: 20px;
 }
 </style>
-

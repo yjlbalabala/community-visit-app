@@ -1,45 +1,25 @@
 <template>
-  <div class="unit-shell">
-    <div class="unit-body">
-      <!-- 左侧导航 -->
-      <SideNav v-model:active="activeTab" />
-
-      <!-- 中间内容区 -->
-      <main class="content-area">
-        <!-- 住户可视化 -->
-        <div v-show="activeTab === 'chart'" class="tab-content chart-tab">
-          <el-card shadow="hover" class="chart-card">
-            <template #header>
-              <div class="level-header">
-                <span class="card-title">🏘️ {{ unitName }} · 住户可视化</span>
-                <span class="card-sub">{{ householdStore.list.length }} 户</span>
-              </div>
-            </template>
-            <div ref="chartRef" class="echarts-box"></div>
-          </el-card>
+  <div class="unit-page">
+    <el-card shadow="hover" class="chart-card">
+      <template #header>
+        <div class="level-header">
+          <span class="card-title">🏘️ {{ unitName }} · 住户可视化</span>
+          <span class="card-sub">
+            {{ householdStore.list.length }} 户 ·
+            待走访 {{ householdStore.todoList.length }} 条
+            <el-button link type="primary" size="small" @click="goTodos">查看待办 →</el-button>
+          </span>
         </div>
-
-        <!-- 待办事项 -->
-        <div v-show="activeTab === 'todos'" class="tab-content">
-          <TodoPanel
-            :todo-list="householdStore.todoList"
-            @edit="handleTodoEdit"
-            @confirm="handleTodoConfirm"
-          />
-        </div>
-
-        <!-- 操作记录 -->
-        <div v-show="activeTab === 'logs'" class="tab-content">
-          <OperationLog :logs="opLogStore.logs" />
-        </div>
-      </main>
-    </div>
+      </template>
+      <div ref="chartRef" class="echarts-box"></div>
+    </el-card>
 
     <!-- 房屋详情抽屉 -->
     <HouseDetailDrawer
       v-model:visible="drawerVisible"
       :household="selectedHousehold"
       @edit="handleDrawerEdit"
+      @confirm-visit="handleDrawerConfirm"
       @view-persons="handleViewPersons"
     />
 
@@ -63,30 +43,36 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import type { Household, Person } from '@/types'
 import { useHouseholdStore } from '@/stores/household'
 import { useOperationLogStore } from '@/stores/operationLog'
 import { useHierarchyStore } from '@/stores/hierarchy'
 import { householdColor } from '@/utils/houseColor'
-import type { NavTab } from '@/components/SideNav.vue'
-import SideNav from '@/components/SideNav.vue'
-import TodoPanel from '@/components/TodoPanel.vue'
-import OperationLog from '@/components/OperationLog.vue'
 import HouseDetailDrawer from '@/components/HouseDetailDrawer.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
 import PersonListDialog from '@/components/PersonListDialog.vue'
 
 // ─── 路由 & Stores ───────────────────────────────────────
 const route = useRoute()
-const unitId = route.params.unitId as string
+const router = useRouter()
 
 const householdStore = useHouseholdStore()
 const opLogStore = useOperationLogStore()
 const hierarchyStore = useHierarchyStore()
 
 const unitName = computed(() => hierarchyStore.currentNode?.name ?? '单元')
+
+/** 当前单元在街道下的完整位置（责任区/小区/单元名） */
+const locOf = () => {
+  const p = hierarchyStore.path
+  return {
+    zoneName: p.find(n => n.nodeType === 'zone')?.name,
+    communityName: p.find(n => n.nodeType === 'community')?.name,
+    unitName: p.find(n => n.nodeType === 'unit')?.name
+  }
+}
 
 /** 人员弹窗定位文案：责任区 · 小区 · 楼栋 · 房号 */
 const personLocationLabel = computed(() => {
@@ -95,8 +81,11 @@ const personLocationLabel = computed(() => {
   return [...names, room].filter(Boolean).join(' · ')
 })
 
-// ─── 导航 ──────────────────────────────────────────────
-const activeTab = ref<NavTab>('chart')
+/** 查看待办 → 进入当前单元范围内的待办 */
+const goTodos = () => {
+  const uid = route.params.unitId as string
+  router.push({ path: '/todos', query: { unitId: uid } })
+}
 
 // ─── ECharts ───────────────────────────────────────────
 const chartRef = ref<HTMLDivElement | null>(null)
@@ -203,15 +192,6 @@ const initChart = async () => {
   })
 }
 
-// 切换到可视化 tab 时需要 resize，因为容器可能从 display:none 变为可见
-watch(activeTab, (tab) => {
-  if (tab === 'chart') {
-    nextTick(() => {
-      if (chartInstance) chartInstance.resize()
-    })
-  }
-})
-
 // 数据变化 → 重绘
 watch(() => householdStore.list, () => {
   nextTick(() => renderChart())
@@ -223,8 +203,6 @@ const personListVisible = ref(false)
 const dialogVisible = ref(false)
 const selectedHousehold = ref<Household | null>(null)
 const editingHousehold = ref<Household | null>(null)
-/** 编辑入口来源：todo=变更信息(记一次走访) / drawer=房屋编辑(不重置走访) */
-const editSource = ref<'todo' | 'drawer'>('drawer')
 
 const openDrawer = (h: Household) => {
   selectedHousehold.value = h
@@ -237,7 +215,7 @@ const handleViewPersons = (h: Household) => {
   personListVisible.value = true
 }
 
-/** 抽屉内人员增删改后，若抽屉仍打开则同步最新对象 */
+/** 抽屉/人员操作后，若抽屉仍打开则同步最新对象 */
 const syncSelected = (updated: Household) => {
   if (drawerVisible.value && selectedHousehold.value?.id === updated.id) {
     selectedHousehold.value = updated
@@ -246,30 +224,24 @@ const syncSelected = (updated: Household) => {
 
 const handleDrawerEdit = (h: Household) => {
   drawerVisible.value = false
-  editSource.value = 'drawer'
   editingHousehold.value = h
   dialogVisible.value = true
 }
 
-const handleTodoEdit = (h: Household) => {
-  editSource.value = 'todo'
-  editingHousehold.value = h
-  dialogVisible.value = true
-}
-
-const handleTodoConfirm = async (h: Household) => {
+const handleDrawerConfirm = async (h: Household) => {
   const updated = await householdStore.confirmVisit(h.id)
   syncSelected(updated)
-  await opLogStore.addLog(
-    h.roomNo,
-    '确认走访',
-    `确认走访完成，住户信息未变更`
-  )
+  await opLogStore.addLog({
+    roomNo: h.roomNo,
+    operationType: '确认走访',
+    changesDetail: '确认走访完成，住户信息未变更',
+    ...locOf()
+  })
 }
 
 const diffText = (oldH: Household, data: Partial<Household>): string => {
   const changed: string[] = []
-  const keys: (keyof Household)[] = ['houseType', 'landlord', 'phone', 'remark', 'lastVisitTime']
+  const keys: (keyof Household)[] = ['houseType', 'landlord', 'phone', 'remark']
   for (const key of keys) {
     if (data[key] !== undefined && data[key] !== oldH[key]) {
       changed.push(`${key}: ${oldH[key] || '—'} → ${data[key]}`)
@@ -283,18 +255,14 @@ const handleSave = async (householdId: string, data: Partial<Household>) => {
   if (!old) return
   const changed = diffText(old, data)
 
-  // 从待办「变更信息」进入时视为完成一次走访，重置走访时间
-  const finalData = editSource.value === 'todo'
-    ? { ...data, lastVisitTime: new Date().toLocaleString('zh-CN', { hour12: false }) }
-    : data
-
-  const updated = await householdStore.updateHousehold(householdId, finalData)
+  const updated = await householdStore.updateHousehold(householdId, data)
   syncSelected(updated)
-  await opLogStore.addLog(
-    old.roomNo,
-    '变更信息',
-    changed.length > 0 ? changed : '无字段变更'
-  )
+  await opLogStore.addLog({
+    roomNo: old.roomNo,
+    operationType: '变更信息',
+    changesDetail: changed.length > 0 ? changed : '无字段变更',
+    ...locOf()
+  })
 }
 
 // ─── 人员 增删改查 ─────────────────────────────────────
@@ -317,12 +285,30 @@ const handlePersonRemove = async (householdId: string, personId: string) => {
 }
 
 // ─── 生命周期 ──────────────────────────────────────────
-onMounted(async () => {
-  await hierarchyStore.enterLevel('unit', unitId)
-  await householdStore.loadList(unitId)
-  await opLogStore.loadLogs()
+const openRoomDrawer = (roomNo: string) => {
+  const h = householdStore.findByRoomNo(roomNo)
+  if (h) openDrawer(h)
+}
+
+/** 进入某单元并加载该单元住户（roomNo 存在时自动打开该户详情） */
+const enterUnit = async (uid: string, roomNo?: string) => {
+  await hierarchyStore.enterLevel('unit', uid)
+  await householdStore.loadList(uid)
   await initChart()
+  if (roomNo) openRoomDrawer(roomNo)
+}
+
+onMounted(() => {
+  enterUnit(route.params.unitId as string, route.query.roomNo as string | undefined)
 })
+
+// 单元或定位房号变化时（如同一页面内 /unit/A?room=1 → /unit/B?room=2）重新加载
+watch(
+  () => [route.params.unitId, route.query.roomNo],
+  () => {
+    enterUnit(route.params.unitId as string, route.query.roomNo as string | undefined)
+  }
+)
 
 onBeforeUnmount(() => {
   if (chartInstance) {
@@ -337,37 +323,14 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.unit-shell {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 100%;
-}
-.unit-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-.content-area {
-  flex: 1;
-  min-height: 0;
-  padding: 16px;
-  overflow-y: auto;
-}
-.tab-content {
-  height: 100%;
-}
-.chart-tab {
-  display: flex;
-  flex-direction: column;
+.unit-page {
+  min-height: 600px;
 }
 .chart-card {
-  flex: 1;
   display: flex;
   flex-direction: column;
 }
 .chart-card :deep(.el-card__body) {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -386,8 +349,9 @@ onBeforeUnmount(() => {
 }
 .echarts-box {
   width: 100%;
-  height: 440px;
+  height: 540px;
 }
 </style>
+
 
 
