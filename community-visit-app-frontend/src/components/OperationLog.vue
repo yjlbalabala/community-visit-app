@@ -1,7 +1,5 @@
 <template>
   <div class="log-panel">
-    <div class="panel-title">📝 操作记录</div>
-
     <template v-if="pagedLogs.length > 0">
       <el-table
         :data="pagedLogs"
@@ -12,15 +10,12 @@
         <el-table-column prop="operatedAt" label="操作时间" width="170" />
         <el-table-column label="住户位置" min-width="260">
           <template #default="{ row }">
-            <span>{{ locationText(row) }}</span>
+            <span>{{ locationText(row) || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="operationType" label="操作类别" width="110">
           <template #default="{ row }">
-            <el-tag
-              :type="row.operationType === '变更信息' ? 'warning' : 'success'"
-              size="small"
-            >
+            <el-tag :type="typeTag(row.operationType)" size="small">
               {{ row.operationType }}
             </el-tag>
           </template>
@@ -68,6 +63,16 @@ const pageSize = 10
 const locationText = (row: OperationLog) =>
   [row.zoneName, row.communityName, row.unitName, row.roomNo].filter(Boolean).join(' · ')
 
+/** 操作类别 → 标签类型 */
+const typeTag = (t: string) => {
+  const map: Record<string, 'warning' | 'success' | 'primary' | 'info'> = {
+    变更信息: 'warning',
+    确认走访: 'success',
+    用户管理: 'primary'
+  }
+  return map[t] ?? 'info'
+}
+
 import PaginationBar from '@/components/PaginationBar.vue'
 
 const pagedLogs = computed(() => {
@@ -83,12 +88,6 @@ const pagedLogs = computed(() => {
   flex-direction: column;
 }
 
-.panel-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 16px;
-  color: #303133;
-}
 
 .empty-box {
   flex: 1;
@@ -107,5 +106,7 @@ const pagedLogs = computed(() => {
   justify-content: center;
 }
 </style>
+
+
 
 

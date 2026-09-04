@@ -71,8 +71,25 @@ export interface Household {
   persons: Person[]
 }
 
-/** 操作类别 */
-export type OperationType = '变更信息' | '确认走访'
+/** 角色：管理员 / 普通用户（一个普通用户只管辖一个责任区） */
+export type Role = 'admin' | 'user'
+
+/** 系统用户 — 与后端 User 表对齐 */
+export interface User {
+  id: string
+  username: string
+  password: string
+  role: Role
+  /** 姓名（管理员创建后可补充） */
+  name: string
+  /** 电话（管理员创建后可补充） */
+  phone: string
+  /** 管辖责任区 id（普通用户必填且全库唯一；管理员为空 = 全部） */
+  zoneId: string | null
+}
+
+/** 操作类别（含后续用户管理等分类） */
+export type OperationType = '变更信息' | '确认走访' | '用户管理'
 
 /** 操作记录 — 与后端 OperationLog 对齐 */
 export interface OperationLog {
@@ -94,4 +111,5 @@ export interface ApiResponse<T> {
   message: string
   data: T
 }
+
 

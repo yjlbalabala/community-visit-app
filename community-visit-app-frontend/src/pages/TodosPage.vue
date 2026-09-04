@@ -11,8 +11,9 @@
       <!-- 范围筛选：责任区 → 小区 → 单元 -->
       <div class="scope-bar">
         <span class="scope-label">查看范围：</span>
-        <el-select v-model="zoneId" placeholder="选择责任区" class="scope-select" @change="handleZoneChange">
-          <el-option v-for="z in zones" :key="z.id" :label="z.name" :value="z.id" />
+        <el-tag v-if="zoneLocked" type="primary" size="small" effect="plain">当前辖区：{{ scopeZoneName }}</el-tag>
+        <el-select v-model="zoneId" placeholder="选择责任区" class="scope-select" :disabled="zoneLocked" @change="handleZoneChange">
+          <el-option v-for="z in zonesOptions" :key="z.id" :label="z.name" :value="z.id" />
         </el-select>
         <el-select
           v-model="communityId"
@@ -110,6 +111,7 @@ import { STREET_ID, fetchZones, fetchCommunities, fetchUnits, fetchNodePath } fr
 import { fetchHousehold, updateHousehold, confirmVisit } from '@/api/household'
 import type { TodoItem } from '@/api/todo'
 import { useTodoStore } from '@/stores/todo'
+import { useAuthStore } from '@/stores/auth'
 import { useOperationLogStore } from '@/stores/operationLog'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import PaginationBar from '@/components/PaginationBar.vue'
@@ -117,8 +119,13 @@ import HouseEditDialog from '@/components/HouseEditDialog.vue'
 
 const todoStore = useTodoStore()
 const opLogStore = useOperationLogStore()
+const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+
+/** 普通用户：责任区锁定为自己管辖的区 */
+const zoneLocked = computed(() => !authStore.isAdmin && !!authStore.userZoneId)
+const zonesOptions = computed(() => (zoneLocked.value && authStore.userZoneId ? zones.value.filter(z => z.id === authStore.userZoneId) : zones.value))
 
 // ─── 范围状态 ─────────────────────────────────────────
 const zones = ref<TreeNode[]>([])
@@ -137,6 +144,8 @@ const scope = computed<{ nodeType: 'street' | 'zone' | 'community' | 'unit'; id:
   if (zoneId.value) return { nodeType: 'zone', id: zoneId.value }
   return { nodeType: 'street', id: STREET_ID }
 })
+
+const scopeZoneName = computed(() => zones.value.find(x => x.id === zoneId.value)?.name ?? '')
 
 const scopeText = computed(() => {
   const z = zones.value.find(x => x.id === zoneId.value)?.name
@@ -177,22 +186,32 @@ const handleCommunityChange = async (id: string) => {
 onMounted(async () => {
   zones.value = await fetchZones()
 
-  // 从单元页「查看待办」进入：预选到该单元范围
+  // 从单元页「查看待办」进入：预选到该单元范围（对管理员与辖区内的普通用户都生效）
   const qUnitId = typeof route.query.unitId === 'string' ? route.query.unitId : ''
   if (qUnitId) {
     const path = await fetchNodePath(qUnitId)
     const zone = path.find(n => n.nodeType === 'zone')
     const community = path.find(n => n.nodeType === 'community')
     const unit = path.find(n => n.nodeType === 'unit')
-    if (zone) {
+    const zoneOk = authStore.isAdmin || (!!authStore.userZoneId && !!zone && zone.id === authStore.userZoneId)
+    if (zoneOk && zone) {
       zoneId.value = zone.id
       communities.value = await fetchCommunities(zone.id)
+      if (community) {
+        communityId.value = community.id
+        units.value = await fetchUnits(community.id)
+      }
+      if (unit) unitId.value = unit.id
+      await reload()
+      return
     }
-    if (community) {
-      communityId.value = community.id
-      units.value = await fetchUnits(community.id)
-    }
-    if (unit) unitId.value = unit.id
+  }
+
+  // 普通用户：责任区锁定为自己管辖的区
+  if (zoneLocked.value && authStore.userZoneId) {
+    const mine = authStore.userZoneId
+    zoneId.value = mine
+    communities.value = await fetchCommunities(mine)
     await reload()
     return
   }
@@ -316,6 +335,9 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   justify-content: flex-end;
 }
 </style>
+
+
+
 
 
 
