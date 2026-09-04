@@ -30,7 +30,7 @@ const nowStr = () => {
 const tsOf = (s: string) => parseDateTime(s)?.getTime() ?? NaN
 
 /** 写一条"待办事项"类操作记录 */
-async function logTaskOp(opts: { zoneName?: string; communityName?: string; unitName?: string; roomNo?: string; detail: string }) {
+async function logTaskOp(opts: { zoneName?: string; communityName?: string; unitName?: string; unitId?: string; roomNo?: string; detail: string }) {
   if (!USE_MOCK) return
   await addOperationLog({
     roomNo: opts.roomNo ?? '',
@@ -38,7 +38,8 @@ async function logTaskOp(opts: { zoneName?: string; communityName?: string; unit
     changesDetail: opts.detail,
     zoneName: opts.zoneName,
     communityName: opts.communityName,
-    unitName: opts.unitName
+    unitName: opts.unitName,
+    unitId: opts.unitId
   })
 }
 
@@ -126,6 +127,7 @@ export async function publishTask(input: PublishTaskInput): Promise<TodoTask> {
     zoneName: input.zoneName,
     communityName: input.communityName,
     unitName: input.unitName,
+    unitId: input.unitId,
     roomNo: selected[0]?.roomNo,
     detail: `发布走访任务给「${input.assigneeUsername}」（${input.zoneName}·${input.communityName}·${input.unitName}）：户 ${rooms}，走访时间 ${input.scheduledVisitTime}${input.remark ? `，说明：${input.remark}` : ''}`
   })
@@ -154,6 +156,7 @@ export async function processExpiredTasks(): Promise<number> {
         zoneName: item.zoneName,
         communityName: item.communityName,
         unitName: item.unitName,
+        unitId: item.unitId,
         roomNo: item.roomNo,
         detail: `走访任务未走访（过期）：户 ${item.roomNo}（${[item.zoneName, item.communityName, item.unitName].filter(Boolean).join('·')}）未在指定时间 ${task.scheduledVisitTime} 前确认走访；下次走访时间已顺延`
       })
@@ -198,6 +201,7 @@ export async function completeActiveTaskForHousehold(householdId: string, visite
           zoneName: item.zoneName,
           communityName: item.communityName,
           unitName: item.unitName,
+          unitId: item.unitId,
           roomNo: item.roomNo,
           detail: `走访任务成功走访：户 ${item.roomNo} 于 ${visitedAt} 确认走访`
         })
@@ -223,6 +227,7 @@ export function taskStatus(task: TodoTask): 'active' | 'expired' | 'done' {
 }
 
 export { VISIT_INTERVAL_DAYS }
+
 
 
 

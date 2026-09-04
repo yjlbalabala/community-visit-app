@@ -121,6 +121,7 @@ import { useTodoStore } from '@/stores/todo'
 import { useOperationLogStore } from '@/stores/operationLog'
 import { useAuthStore } from '@/stores/auth'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
+import { diffLines } from '@/utils/logFields'
 import PaginationBar from '@/components/PaginationBar.vue'
 import TimeRangeSelect, { type DateRange } from '@/components/TimeRangeSelect.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
@@ -274,7 +275,8 @@ const handleConfirm = async (item: TodoItem) => {
     changesDetail: '确认走访完成，住户信息未变更',
     zoneName: item.zoneName,
     communityName: item.communityName,
-    unitName: item.unitName
+    unitName: item.unitName,
+    unitId: item.unitId
   })
   await reload()
 }
@@ -295,23 +297,21 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   const old = editingHousehold.value
   if (!old) return
 
-  const changed: string[] = []
   const keys: (keyof Household)[] = ['houseType', 'landlord', 'phone', 'remark']
-  for (const key of keys) {
-    if (data[key] !== undefined && data[key] !== old[key]) {
-      changed.push(`${key}: ${old[key] || '—'} → ${data[key]}`)
-    }
-  }
+  const changed = keys
+    .filter(key => data[key] !== undefined && data[key] !== old[key])
+    .map(key => ({ key, from: String(old[key] ?? '—'), to: String(data[key] ?? '—') }))
 
   // 仅变更住户信息，不重置走访时间；待走访须「确认走访」成功后才移除
   await updateHousehold(item.unitId, householdId, data)
   await opLogStore.addLog({
     roomNo: item.roomNo,
     operationType: '变更信息',
-    changesDetail: changed.length > 0 ? changed.join('；') : '无字段变更',
+    changesDetail: changed.length > 0 ? diffLines(changed) : '无字段变更',
     zoneName: item.zoneName,
     communityName: item.communityName,
-    unitName: item.unitName
+    unitName: item.unitName,
+    unitId: item.unitId
   })
   editDialogVisible.value = false
   await reload()
@@ -398,6 +398,10 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   justify-content: flex-end;
 }
 </style>
+
+
+
+
 
 
 

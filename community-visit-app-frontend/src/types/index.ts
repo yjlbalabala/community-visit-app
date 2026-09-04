@@ -103,6 +103,8 @@ export interface OperationLog {
   zoneName?: string
   communityName?: string
   unitName?: string
+  /** 单元 id（用于点击住户位置跳转到单元格视图） */
+  unitId?: string
   operationType: OperationType
   /** JSON 字符串：变更前后的字段对比 */
   changesDetail: string
@@ -164,3 +166,4 @@ export interface TodoTask {
   createdAt: string
   items: TodoTaskItem[]
 }
+

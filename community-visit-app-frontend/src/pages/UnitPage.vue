@@ -50,6 +50,7 @@ import { useHouseholdStore } from '@/stores/household'
 import { useOperationLogStore } from '@/stores/operationLog'
 import { useHierarchyStore } from '@/stores/hierarchy'
 import { householdColor } from '@/utils/houseColor'
+import { labelOfField, diffLines } from '@/utils/logFields'
 import HouseDetailDrawer from '@/components/HouseDetailDrawer.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
 import PersonListDialog from '@/components/PersonListDialog.vue'
@@ -70,7 +71,8 @@ const locOf = () => {
   return {
     zoneName: p.find(n => n.nodeType === 'zone')?.name,
     communityName: p.find(n => n.nodeType === 'community')?.name,
-    unitName: p.find(n => n.nodeType === 'unit')?.name
+    unitName: p.find(n => n.nodeType === 'unit')?.name,
+    unitId: route.params.unitId as string
   }
 }
 
@@ -240,14 +242,11 @@ const handleDrawerConfirm = async (h: Household) => {
 }
 
 const diffText = (oldH: Household, data: Partial<Household>): string => {
-  const changed: string[] = []
   const keys: (keyof Household)[] = ['houseType', 'landlord', 'phone', 'remark']
-  for (const key of keys) {
-    if (data[key] !== undefined && data[key] !== oldH[key]) {
-      changed.push(`${key}: ${oldH[key] || '—'} → ${data[key]}`)
-    }
-  }
-  return changed.length > 0 ? changed.join('；') : '无字段变更'
+  const lines = keys
+    .filter(key => data[key] !== undefined && data[key] !== oldH[key])
+    .map(key => ({ key, from: String(oldH[key] ?? '—'), to: String(data[key] ?? '—') }))
+  return lines.length > 0 ? diffLines(lines) : '无字段变更'
 }
 
 const handleSave = async (householdId: string, data: Partial<Household>) => {
@@ -265,8 +264,20 @@ const handleSave = async (householdId: string, data: Partial<Household>) => {
   })
 }
 
-// ─── 人员 增删改查 ─────────────────────────────────────
+// ─── 人员 增删改查（每次操作写"变更信息"记录） ──────────────
+const personDiff = (oldP: Person, newP: Person): string => {
+  const keys: (keyof Person)[] = ['name', 'gender', 'idCard', 'phone', 'personType']
+  const lines = keys
+    .filter(key => oldP[key] !== newP[key])
+    .map(key => ({ key, from: String(oldP[key] ?? '—'), to: String(newP[key] ?? '—') }))
+  return lines.length > 0 ? diffLines(lines) : '无字段变更'
+}
+
 const handlePersonSave = async (householdId: string, person: Person) => {
+  const oldHousehold = householdStore.findByHouseholdId(householdId)
+  if (!oldHousehold) return
+  const oldPerson = person.id ? oldHousehold.persons.find(p => p.id === person.id) : undefined
+
   const updated = person.id
     ? await householdStore.updatePerson(householdId, person)
     : await householdStore.addPerson(householdId, {
@@ -277,11 +288,26 @@ const handlePersonSave = async (householdId: string, person: Person) => {
         personType: person.personType
       })
   syncSelected(updated)
+
+  const detail = person.id
+    ? (oldPerson ? `人员信息变更：${personDiff(oldPerson, person)}` : `人员信息变更：${person.name}`)
+    : `新增人员：${person.name}（${labelOfField('personType')}：${person.personType}，${labelOfField('phone')}：${person.phone}）`
+  await opLogStore.addLog({ roomNo: oldHousehold.roomNo, operationType: '变更信息', changesDetail: detail, ...locOf() })
 }
 
 const handlePersonRemove = async (householdId: string, personId: string) => {
+  const oldHousehold = householdStore.findByHouseholdId(householdId)
+  const removedPerson = oldHousehold?.persons.find(p => p.id === personId)
   const updated = await householdStore.removePerson(householdId, personId)
   syncSelected(updated)
+  if (oldHousehold && removedPerson) {
+    await opLogStore.addLog({
+      roomNo: oldHousehold.roomNo,
+      operationType: '变更信息',
+      changesDetail: `删除人员：${removedPerson.name}（${labelOfField('personType')}：${removedPerson.personType}）`,
+      ...locOf()
+    })
+  }
 }
 
 // ─── 生命周期 ──────────────────────────────────────────
@@ -352,6 +378,7 @@ onBeforeUnmount(() => {
   height: 540px;
 }
 </style>
+
 
 
 

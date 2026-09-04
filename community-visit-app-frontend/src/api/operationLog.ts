@@ -7,7 +7,8 @@ const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 const STORAGE_KEY = 'cva_operation_logs'
 const MAX_KEPT = 200
 
-function loadPersisted(): OperationLog[] {
+/** 从 localStorage 读取（存储为唯一数据源，保证各模块实例一致） */
+function readPersisted(): OperationLog[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     return raw ? (JSON.parse(raw) as OperationLog[]) : []
@@ -23,12 +24,10 @@ function savePersisted(list: OperationLog[]) {
   }
 }
 
-let mockLogs: OperationLog[] = loadPersisted()
-
 /** 获取全部操作记录（最新在前） */
 export async function fetchOperationLogs(): Promise<OperationLog[]> {
   if (USE_MOCK) {
-    return [...mockLogs].reverse()
+    return readPersisted().reverse()
   }
   const res: any = await apiClient.get('/operation-logs')
   return res.data as OperationLog[]
@@ -42,6 +41,7 @@ export interface OperationLogInput {
   zoneName?: string
   communityName?: string
   unitName?: string
+  unitId?: string
 }
 
 /** 新增操作记录 */
@@ -54,16 +54,21 @@ export async function addOperationLog(input: OperationLogInput): Promise<Operati
     zoneName: input.zoneName,
     communityName: input.communityName,
     unitName: input.unitName,
+    unitId: input.unitId,
     operatedAt: new Date().toLocaleString('zh-CN', { hour12: false })
   }
 
   if (USE_MOCK) {
-    mockLogs.push(entry)
-    savePersisted(mockLogs)
+    savePersisted([...readPersisted(), entry])
     return { ...entry }
   }
   const res: any = await apiClient.post('/operation-logs', entry)
   return res.data as OperationLog
 }
+
+
+
+
+
 
 

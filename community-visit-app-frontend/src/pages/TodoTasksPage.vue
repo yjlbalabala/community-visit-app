@@ -152,7 +152,8 @@ const handleConfirm = async (row: RowItem) => {
     changesDetail: '确认走访完成，住户信息未变更',
     zoneName: row.zoneName,
     communityName: row.communityName,
-    unitName: row.unitName
+    unitName: row.unitName,
+    unitId: row.unitId
   })
   await refresh()
 }
@@ -223,4 +224,5 @@ onMounted(async () => {
   text-decoration: underline;
 }
 </style>
+
 
