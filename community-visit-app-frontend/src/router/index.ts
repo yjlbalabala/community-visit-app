@@ -7,7 +7,7 @@ import StreetPage from '@/pages/StreetPage.vue'
 import ZonePage from '@/pages/ZonePage.vue'
 import CommunityPage from '@/pages/CommunityPage.vue'
 import UnitPage from '@/pages/UnitPage.vue'
-import TodosPage from '@/pages/TodosPage.vue'
+import VisitsPage from '@/pages/VisitsPage.vue'
 import LogsPage from '@/pages/LogsPage.vue'
 import UsersPage from '@/pages/UsersPage.vue'
 import StatsPage from '@/pages/StatsPage.vue'
@@ -29,7 +29,7 @@ const router = createRouter({
         { path: 'zone/:zoneId', name: 'zone', component: ZonePage },
         { path: 'community/:communityId', name: 'community', component: CommunityPage },
         { path: 'unit/:unitId', name: 'unit', component: UnitPage },
-        { path: 'todos', name: 'todos', component: TodosPage },
+        { path: 'visits', name: 'visits', component: VisitsPage },
         { path: 'logs', name: 'logs', component: LogsPage },
         { path: 'users', name: 'users', component: UsersPage, meta: { adminOnly: true } },
         { path: 'stats', name: 'stats', component: StatsPage }
@@ -74,4 +74,5 @@ router.beforeEach(async (to) => {
 })
 
 export default router
+
 

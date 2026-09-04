@@ -8,8 +8,8 @@
       <el-menu-item index="/">
         <span class="nav-icon">🏘️</span><span>小区走访登记</span>
       </el-menu-item>
-      <el-menu-item index="/todos">
-        <span class="nav-icon">📋</span><span>待办事项</span>
+      <el-menu-item index="/visits">
+        <span class="nav-icon">📋</span><span>走访信息</span>
       </el-menu-item>
       <el-menu-item index="/stats">
         <span class="nav-icon">📊</span><span>统计信息</span>
@@ -32,9 +32,9 @@ import { useAuthStore } from '@/stores/auth'
 const route = useRoute()
 const authStore = useAuthStore()
 
-/** 层级页面统一高亮「小区走访登记」，/todos、/logs 各自高亮 */
+/** 层级页面统一高亮「小区走访登记」，/visits、/logs 等各自高亮 */
 const activeMenu = computed(() => {
-  if (route.path.startsWith('/todos')) return '/todos'
+  if (route.path.startsWith('/visits')) return '/visits'
   if (route.path.startsWith('/logs')) return '/logs'
   if (route.path.startsWith('/users')) return '/users'
   if (route.path.startsWith('/stats')) return '/stats'
@@ -57,6 +57,8 @@ const activeMenu = computed(() => {
   margin-right: 8px;
 }
 </style>
+
+
 
 
 

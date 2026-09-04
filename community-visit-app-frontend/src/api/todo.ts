@@ -33,6 +33,8 @@ export interface TodoItem {
   remark: string
   lastVisitTime: string
   expectedVisitTime: string | null
+  /** 是否已到需走访时间（预计走访 - 提前天数 <= 今天） */
+  due: boolean
 }
 
 interface UnitCtx {
@@ -60,17 +62,17 @@ function collectScopeUnits(scope: TodoScope): UnitCtx[] {
   return out
 }
 
-/** 获取某范围（责任区/小区/单元/全街道）内到期待办的住户 */
+/** 获取某范围（责任区/小区/单元）内全部住户的走访信息（含是否待走访） */
 export async function fetchScopeTodos(scope: TodoScope): Promise<TodoItem[]> {
   if (!USE_MOCK) {
-    const res: any = await apiClient.get('/todos', { params: { nodeType: scope.nodeType, id: scope.id } })
+    const res: any = await apiClient.get('/visits', { params: { nodeType: scope.nodeType, id: scope.id } })
     return res.data as TodoItem[]
   }
   const items: TodoItem[] = []
   for (const ctx of collectScopeUnits(scope)) {
     const households = getUnitHouseholds(ctx.unit.id)
     for (const h of households) {
-      if (h.persons.length === 0 || !isVisitDue(h)) continue
+      if (h.persons.length === 0) continue
       items.push({
         householdId: h.id,
         unitId: ctx.unit.id,
@@ -86,12 +88,19 @@ export async function fetchScopeTodos(scope: TodoScope): Promise<TodoItem[]> {
         personsCount: h.persons.length,
         remark: h.remark,
         lastVisitTime: h.lastVisitTime,
-        expectedVisitTime: expectedVisitTime(h)
+        expectedVisitTime: expectedVisitTime(h),
+        due: isVisitDue(h)
       })
     }
   }
-  items.sort((a, b) => (a.expectedVisitTime ?? '').localeCompare(b.expectedVisitTime ?? ''))
+  // 待走访优先，其次按预计走访时间升序
+  items.sort((a, b) => {
+    if (a.due !== b.due) return a.due ? -1 : 1
+    return (a.expectedVisitTime ?? '').localeCompare(b.expectedVisitTime ?? '')
+  })
   return items
 }
+
+
 
 

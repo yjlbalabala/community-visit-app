@@ -7,7 +7,7 @@
           <span class="card-sub">
             {{ householdStore.list.length }} 户 ·
             待走访 {{ householdStore.todoList.length }} 条
-            <el-button link type="primary" size="small" @click="goTodos">查看待办 →</el-button>
+            <el-button link type="primary" size="small" @click="goVisits">走访信息 →</el-button>
           </span>
         </div>
       </template>
@@ -81,10 +81,10 @@ const personLocationLabel = computed(() => {
   return [...names, room].filter(Boolean).join(' · ')
 })
 
-/** 查看待办 → 进入当前单元范围内的待办 */
-const goTodos = () => {
+/** 走访信息 → 进入当前单元范围内的待办 */
+const goVisits = () => {
   const uid = route.params.unitId as string
-  router.push({ path: '/todos', query: { unitId: uid } })
+  router.push({ path: '/visits', query: { unitId: uid } })
 }
 
 // ─── ECharts ───────────────────────────────────────────
@@ -352,6 +352,7 @@ onBeforeUnmount(() => {
   height: 540px;
 }
 </style>
+
 
 
 

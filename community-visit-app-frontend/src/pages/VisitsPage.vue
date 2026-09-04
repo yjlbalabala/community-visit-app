@@ -1,60 +1,66 @@
 <template>
-  <div class="todos-page">
-    <el-card shadow="hover" class="todos-card">
+  <div class="visits-page">
+    <el-card shadow="hover" class="visits-card">
       <template #header>
         <div class="page-header">
-          <span class="card-title">📋 待办事项</span>
-          <span class="card-sub">{{ scopeText }} · 共 {{ todoStore.items.length }} 条</span>
+          <span class="card-title">📋 走访信息</span>
+          <span class="card-sub">
+            {{ scopeText }} · 共 {{ total }} 户，其中待走访 <b style="color:#f56c6c">{{ dueCount }}</b> 户
+          </span>
         </div>
       </template>
 
       <!-- 范围筛选：责任区 → 小区 → 单元 -->
-      <div class="scope-bar">
-        <span class="scope-label">查看范围：</span>
+      <div class="filter-row">
+        <span class="filter-label">查看范围：</span>
         <el-tag v-if="zoneLocked" type="primary" size="small" effect="plain">当前辖区：{{ scopeZoneName }}</el-tag>
-        <el-select v-model="zoneId" placeholder="选择责任区" class="scope-select" :disabled="zoneLocked" @change="handleZoneChange">
+        <el-select v-model="zoneId" placeholder="选择责任区" class="filter-select" :disabled="zoneLocked" @change="handleZoneChange">
           <el-option v-for="z in zonesOptions" :key="z.id" :label="z.name" :value="z.id" />
         </el-select>
-        <el-select
-          v-model="communityId"
-          placeholder="全部小区"
-          clearable
-          class="scope-select"
-          :disabled="!zoneId"
-          @change="handleCommunityChange"
-        >
+        <el-select v-model="communityId" placeholder="全部小区" clearable class="filter-select" :disabled="!zoneId" @change="handleScopeChange">
           <el-option v-for="c in communities" :key="c.id" :label="c.name" :value="c.id" />
         </el-select>
-        <el-select
-          v-model="unitId"
-          placeholder="全部单元"
-          clearable
-          class="scope-select"
-          :disabled="!communityId"
-          @change="reload"
-        >
+        <el-select v-model="unitId" placeholder="全部单元" clearable class="filter-select" :disabled="!communityId" @change="reload">
           <el-option v-for="u in units" :key="u.id" :label="u.name" :value="u.id" />
         </el-select>
-        <el-button :icon="Refresh" @click="reload">刷新</el-button>
       </div>
 
-      <div v-loading="todoStore.loading" class="todos-body">
-        <el-empty
-          v-if="!todoStore.loading && pagedItems.length === 0"
-          description="该范围内暂无到期待办"
-          :image-size="80"
-        />
+      <!-- 条件筛选：上次走访/预计走访时间段 + 房屋类别 -->
+      <div class="filter-row cond-row">
+        <span class="filter-label">筛选条件：</span>
+        <span class="cond-item">
+          <span class="cond-name">上次走访</span>
+          <TimeRangeSelect v-model="lastRange" start-placeholder="开始日期" end-placeholder="结束日期" width="240px" />
+        </span>
+        <span class="cond-item">
+          <span class="cond-name">预计走访</span>
+          <TimeRangeSelect v-model="expectedRange" start-placeholder="开始日期" end-placeholder="结束日期" width="240px" />
+        </span>
+        <span class="cond-item">
+          <span class="cond-name">房屋类别</span>
+          <el-select v-model="houseType" placeholder="全部类别" clearable class="house-select" @change="onCondChange">
+            <el-option label="自购房" value="自购房" />
+            <el-option label="出租房" value="出租房" />
+            <el-option label="群租房" value="群租房" />
+          </el-select>
+        </span>
+        <el-button :icon="RefreshLeft" @click="resetCond">重置条件</el-button>
+      </div>
+
+      <div v-loading="todoStore.loading" class="table-body">
+        <el-empty v-if="!todoStore.loading && filteredItems.length === 0" description="该范围内没有符合条件的走访信息" :image-size="80" />
         <template v-else>
-          <el-table :data="pagedItems" stripe border class="todos-table">
-            <el-table-column label="范围（点击查看该户）" min-width="230">
+          <el-table :data="pagedItems" stripe border class="visit-table">
+            <el-table-column label="住户（点击查看）" min-width="240">
               <template #default="{ row }">
-                <div class="cell-loc clickable" @click="viewHousehold(row)" title="点击进入该户单元格视图">
+                <div class="cell-loc clickable" @click="viewHousehold(row)" title="进入该户单元格视图">
+                  <el-tag v-if="row.due" type="danger" size="small" class="due-tag">待走访</el-tag>
                   <span class="loc-link">{{ row.zoneName }} · {{ row.communityName }} · {{ row.unitName }}</span>
-                  <el-tag type="danger" size="small">{{ row.roomNo }}</el-tag>
+                  <span class="room-no">{{ row.roomNo }}</span>
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="房屋类别" width="100">
+            <el-table-column label="房屋类别" width="92">
               <template #default="{ row }">
                 <el-tag :type="houseTag(row.houseType)" size="small">{{ row.houseType }}</el-tag>
               </template>
@@ -69,11 +75,11 @@
             </el-table-column>
             <el-table-column label="预计走访" width="160">
               <template #default="{ row }">
-                <b style="color:#f56c6c">{{ row.expectedVisitTime || '—' }}</b>
+                <b :style="{ color: row.due ? '#f56c6c' : '#303133' }">{{ row.expectedVisitTime || '—' }}</b>
               </template>
             </el-table-column>
-            <el-table-column prop="remark" label="情况说明" min-width="180" show-overflow-tooltip />
-            <el-table-column label="操作" width="190" fixed="right">
+            <el-table-column prop="remark" label="情况说明" min-width="160" show-overflow-tooltip />
+            <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
                 <el-button link type="info" size="small" @click.stop="viewHousehold(row)">查看</el-button>
                 <el-button link type="primary" size="small" @click="handleEdit(row)">变更信息</el-button>
@@ -82,9 +88,9 @@
             </el-table-column>
           </el-table>
 
-          <div class="pagination-row" v-if="todoStore.items.length > pageSize">
+          <div class="pagination-row" v-if="filteredItems.length > pageSize">
             <PaginationBar
-              :total="todoStore.items.length"
+              :total="filteredItems.length"
               v-model:current-page="currentPage"
               v-model:page-size="pageSize"
               :page-sizes="[10, 20, 50]"
@@ -105,16 +111,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Refresh } from '@element-plus/icons-vue'
+import { RefreshLeft } from '@element-plus/icons-vue'
 import type { HouseType, Household, TreeNode } from '@/types'
 import { STREET_ID, fetchZones, fetchCommunities, fetchUnits, fetchNodePath } from '@/api/hierarchy'
 import { fetchHousehold, updateHousehold, confirmVisit } from '@/api/household'
 import type { TodoItem } from '@/api/todo'
 import { useTodoStore } from '@/stores/todo'
-import { useAuthStore } from '@/stores/auth'
 import { useOperationLogStore } from '@/stores/operationLog'
+import { useAuthStore } from '@/stores/auth'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import PaginationBar from '@/components/PaginationBar.vue'
+import TimeRangeSelect, { type DateRange } from '@/components/TimeRangeSelect.vue'
 import HouseEditDialog from '@/components/HouseEditDialog.vue'
 
 const todoStore = useTodoStore()
@@ -123,11 +130,6 @@ const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-/** 普通用户：责任区锁定为自己管辖的区 */
-const zoneLocked = computed(() => !authStore.isAdmin && !!authStore.userZoneId)
-const zonesOptions = computed(() => (zoneLocked.value && authStore.userZoneId ? zones.value.filter(z => z.id === authStore.userZoneId) : zones.value))
-
-// ─── 范围状态 ─────────────────────────────────────────
 const zones = ref<TreeNode[]>([])
 const communities = ref<TreeNode[]>([])
 const units = ref<TreeNode[]>([])
@@ -135,8 +137,23 @@ const zoneId = ref('')
 const communityId = ref('')
 const unitId = ref('')
 
+// 筛选条件
+const lastRange = ref<DateRange>(null)
+const expectedRange = ref<DateRange>(null)
+const houseType = ref('')
+
 const currentPage = ref(1)
 const pageSize = ref(10)
+
+// ─── 角色/辖区 ────────────────────────────────────────
+const zoneLocked = computed(() => !authStore.isAdmin && !!authStore.userZoneId)
+const zonesOptions = computed(() => (zoneLocked.value && authStore.userZoneId ? zones.value.filter(z => z.id === authStore.userZoneId) : zones.value))
+const scopeZoneName = computed(() => zones.value.find(x => x.id === zoneId.value)?.name ?? '')
+const scopeText = computed(() => {
+  const c = communities.value.find(x => x.id === communityId.value)?.name
+  const u = units.value.find(x => x.id === unitId.value)?.name
+  return [scopeZoneName.value, c, u].filter(Boolean).join(' · ') || '西岗街道'
+})
 
 const scope = computed<{ nodeType: 'street' | 'zone' | 'community' | 'unit'; id: string }>(() => {
   if (unitId.value) return { nodeType: 'unit', id: unitId.value }
@@ -145,23 +162,42 @@ const scope = computed<{ nodeType: 'street' | 'zone' | 'community' | 'unit'; id:
   return { nodeType: 'street', id: STREET_ID }
 })
 
-const scopeZoneName = computed(() => zones.value.find(x => x.id === zoneId.value)?.name ?? '')
+const houseTag = (t: HouseType) => HOUSE_TAG_MAP[t] || 'info'
 
-const scopeText = computed(() => {
-  const z = zones.value.find(x => x.id === zoneId.value)?.name
-  const c = communities.value.find(x => x.id === communityId.value)?.name
-  const u = units.value.find(x => x.id === unitId.value)?.name
-  return [z, c, u].filter(Boolean).join(' · ') || '西岗街道'
+// ─── 过滤 + 分页 ──────────────────────────────────────
+const inRange = (dateStr: string | null | undefined, range: DateRange): boolean => {
+  if (!range || !dateStr) return false
+  const d = dateStr.slice(0, 10)
+  return d >= range[0] && d <= range[1]
+}
+
+const filteredItems = computed(() => {
+  const list = todoStore.items
+  return list.filter(item => {
+    if (houseType.value && item.houseType !== houseType.value) return false
+    if (lastRange.value && !inRange(item.lastVisitTime, lastRange.value)) return false
+    if (expectedRange.value && !inRange(item.expectedVisitTime, expectedRange.value)) return false
+    return true
+  })
 })
+
+const total = computed(() => filteredItems.value.length)
+const dueCount = computed(() => filteredItems.value.filter(i => i.due).length)
 
 const pagedItems = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return todoStore.items.slice(start, start + pageSize.value)
+  return filteredItems.value.slice(start, start + pageSize.value)
 })
 
-const houseTag = (t: HouseType) => HOUSE_TAG_MAP[t] || 'info'
+const onCondChange = () => { currentPage.value = 1 }
+const resetCond = () => {
+  lastRange.value = null
+  expectedRange.value = null
+  houseType.value = ''
+  currentPage.value = 1
+}
 
-// ─── 加载与刷新 ───────────────────────────────────────
+// ─── 加载 ─────────────────────────────────────────────
 const reload = async () => {
   currentPage.value = 1
   await todoStore.load(scope.value)
@@ -176,7 +212,7 @@ const handleZoneChange = async (id: string) => {
   await reload()
 }
 
-const handleCommunityChange = async (id: string) => {
+const handleScopeChange = async (id: string) => {
   communityId.value = id ?? ''
   unitId.value = ''
   units.value = communityId.value ? await fetchUnits(communityId.value) : []
@@ -186,32 +222,30 @@ const handleCommunityChange = async (id: string) => {
 onMounted(async () => {
   zones.value = await fetchZones()
 
-  // 从单元页「查看待办」进入：预选到该单元范围（对管理员与辖区内的普通用户都生效）
+  // 普通用户：责任区锁定为自己管辖的区
+  if (zoneLocked.value && authStore.userZoneId) {
+    zoneId.value = authStore.userZoneId
+    communities.value = await fetchCommunities(authStore.userZoneId)
+    await reload()
+    return
+  }
+
+  // 从单元页「走访信息」进入：预选到该单元范围
   const qUnitId = typeof route.query.unitId === 'string' ? route.query.unitId : ''
   if (qUnitId) {
     const path = await fetchNodePath(qUnitId)
     const zone = path.find(n => n.nodeType === 'zone')
     const community = path.find(n => n.nodeType === 'community')
     const unit = path.find(n => n.nodeType === 'unit')
-    const zoneOk = authStore.isAdmin || (!!authStore.userZoneId && !!zone && zone.id === authStore.userZoneId)
-    if (zoneOk && zone) {
+    if (zone) {
       zoneId.value = zone.id
       communities.value = await fetchCommunities(zone.id)
-      if (community) {
-        communityId.value = community.id
-        units.value = await fetchUnits(community.id)
-      }
-      if (unit) unitId.value = unit.id
-      await reload()
-      return
     }
-  }
-
-  // 普通用户：责任区锁定为自己管辖的区
-  if (zoneLocked.value && authStore.userZoneId) {
-    const mine = authStore.userZoneId
-    zoneId.value = mine
-    communities.value = await fetchCommunities(mine)
+    if (community) {
+      communityId.value = community.id
+      units.value = await fetchUnits(community.id)
+    }
+    if (unit) unitId.value = unit.id
     await reload()
     return
   }
@@ -223,15 +257,10 @@ onMounted(async () => {
   }
 })
 
-/** 跳转到该户所在单元的单元格视图（自动定位该户） */
+// ─── 查看/处理 ────────────────────────────────────────
 const viewHousehold = (item: TodoItem) => {
   router.push({ path: `/unit/${item.unitId}`, query: { roomNo: item.roomNo } })
 }
-
-// ─── 处理待办 ─────────────────────────────────────────
-const editDialogVisible = ref(false)
-const editingHousehold = ref<Household | null>(null)
-const editingItem = ref<TodoItem | null>(null)
 
 const handleConfirm = async (item: TodoItem) => {
   await confirmVisit(item.unitId, item.householdId)
@@ -245,6 +274,10 @@ const handleConfirm = async (item: TodoItem) => {
   })
   await reload()
 }
+
+const editDialogVisible = ref(false)
+const editingHousehold = ref<Household | null>(null)
+const editingItem = ref<TodoItem | null>(null)
 
 const handleEdit = async (item: TodoItem) => {
   editingItem.value = item
@@ -266,7 +299,7 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
     }
   }
 
-  // 仅变更住户信息，不重置走访时间：待办仍保留，须「确认走访」成功后才移除
+  // 仅变更住户信息，不重置走访时间；待走访须「确认走访」成功后才移除
   await updateHousehold(item.unitId, householdId, data)
   await opLogStore.addLog({
     roomNo: item.roomNo,
@@ -282,7 +315,7 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
 </script>
 
 <style scoped>
-.todos-card {
+.visits-card {
   min-height: 600px;
 }
 .page-header {
@@ -297,30 +330,50 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   color: #909399;
   font-size: 13px;
 }
-.scope-bar {
+.filter-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
-.scope-label {
+.cond-row {
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+.filter-label {
   color: #606266;
   font-weight: 500;
+  white-space: nowrap;
 }
-.scope-select {
-  width: 200px;
+.filter-select {
+  width: 180px;
 }
-.todos-body {
-  min-height: 320px;
+.house-select {
+  width: 130px;
 }
-.todos-table {
+.cond-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cond-name {
+  color: #909399;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.table-body {
+  min-height: 300px;
+}
+.visit-table {
   width: 100%;
 }
 .cell-loc {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .clickable {
   cursor: pointer;
@@ -329,15 +382,15 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   color: #409eff;
   text-decoration: underline;
 }
+.due-tag {
+  flex-shrink: 0;
+}
+.room-no {
+  font-weight: 600;
+}
 .pagination-row {
   margin-top: 14px;
   display: flex;
   justify-content: flex-end;
 }
 </style>
-
-
-
-
-
-
