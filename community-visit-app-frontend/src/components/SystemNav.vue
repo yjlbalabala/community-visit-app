@@ -11,6 +11,9 @@
       <el-menu-item index="/todos">
         <span class="nav-icon">📋</span><span>待办事项</span>
       </el-menu-item>
+      <el-menu-item index="/stats">
+        <span class="nav-icon">📊</span><span>统计信息</span>
+      </el-menu-item>
       <el-menu-item index="/logs">
         <span class="nav-icon">📝</span><span>操作记录</span>
       </el-menu-item>
@@ -34,6 +37,7 @@ const activeMenu = computed(() => {
   if (route.path.startsWith('/todos')) return '/todos'
   if (route.path.startsWith('/logs')) return '/logs'
   if (route.path.startsWith('/users')) return '/users'
+  if (route.path.startsWith('/stats')) return '/stats'
   return '/'
 })
 </script>
@@ -53,5 +57,6 @@ const activeMenu = computed(() => {
   margin-right: 8px;
 }
 </style>
+
 
 
