@@ -49,7 +49,7 @@ import { computed } from 'vue'
 import { CircleCheck, Edit, User } from '@element-plus/icons-vue'
 import type { Household } from '@/types'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
-import { expectedVisitTime } from '@/utils/visitRule'
+import { effectiveExpectedVisitTime } from '@/utils/visitRule'
 
 const props = defineProps<{
   visible: boolean
@@ -64,7 +64,7 @@ defineEmits<{
 }>()
 
 const houseTagType = computed(() => (props.household ? HOUSE_TAG_MAP[props.household.houseType] : 'info'))
-const expectedTime = computed(() => (props.household ? expectedVisitTime(props.household) : null))
+const expectedTime = computed(() => (props.household ? effectiveExpectedVisitTime(props.household) : null))
 </script>
 
 <style scoped>
@@ -86,4 +86,5 @@ const expectedTime = computed(() => (props.household ? expectedVisitTime(props.h
   flex-wrap: wrap;
 }
 </style>
+
 

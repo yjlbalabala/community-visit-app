@@ -115,6 +115,7 @@ import { RefreshLeft } from '@element-plus/icons-vue'
 import type { HouseType, Household, TreeNode } from '@/types'
 import { STREET_ID, fetchZones, fetchCommunities, fetchUnits, fetchNodePath } from '@/api/hierarchy'
 import { fetchHousehold, updateHousehold, confirmVisit } from '@/api/household'
+import { completeActiveTaskForHousehold } from '@/api/todoTask'
 import type { TodoItem } from '@/api/todo'
 import { useTodoStore } from '@/stores/todo'
 import { useOperationLogStore } from '@/stores/operationLog'
@@ -222,30 +223,31 @@ const handleScopeChange = async (id: string) => {
 onMounted(async () => {
   zones.value = await fetchZones()
 
-  // 普通用户：责任区锁定为自己管辖的区
-  if (zoneLocked.value && authStore.userZoneId) {
-    zoneId.value = authStore.userZoneId
-    communities.value = await fetchCommunities(authStore.userZoneId)
-    await reload()
-    return
-  }
-
-  // 从单元页「走访信息」进入：预选到该单元范围
+  // 从单元页「走访信息」进入：预选到该单元范围（管理员与辖区内的普通用户均生效）
   const qUnitId = typeof route.query.unitId === 'string' ? route.query.unitId : ''
   if (qUnitId) {
     const path = await fetchNodePath(qUnitId)
     const zone = path.find(n => n.nodeType === 'zone')
     const community = path.find(n => n.nodeType === 'community')
     const unit = path.find(n => n.nodeType === 'unit')
-    if (zone) {
+    const zoneOk = authStore.isAdmin || (!!authStore.userZoneId && !!zone && zone.id === authStore.userZoneId)
+    if (zoneOk && zone) {
       zoneId.value = zone.id
       communities.value = await fetchCommunities(zone.id)
+      if (community) {
+        communityId.value = community.id
+        units.value = await fetchUnits(community.id)
+      }
+      if (unit) unitId.value = unit.id
+      await reload()
+      return
     }
-    if (community) {
-      communityId.value = community.id
-      units.value = await fetchUnits(community.id)
-    }
-    if (unit) unitId.value = unit.id
+  }
+
+  // 普通用户：责任区锁定为自己管辖的区
+  if (zoneLocked.value && authStore.userZoneId) {
+    zoneId.value = authStore.userZoneId
+    communities.value = await fetchCommunities(authStore.userZoneId)
     await reload()
     return
   }
@@ -263,7 +265,9 @@ const viewHousehold = (item: TodoItem) => {
 }
 
 const handleConfirm = async (item: TodoItem) => {
-  await confirmVisit(item.unitId, item.householdId)
+  const updated = await confirmVisit(item.unitId, item.householdId)
+  // 若该户存在管理员下发的走访任务 → 成功走访即任务完成
+  await completeActiveTaskForHousehold(item.householdId, updated.lastVisitTime)
   await opLogStore.addLog({
     roomNo: item.roomNo,
     operationType: '确认走访',
@@ -394,3 +398,6 @@ const handleEditSave = async (householdId: string, data: Partial<Household>) => 
   justify-content: flex-end;
 }
 </style>
+
+
+

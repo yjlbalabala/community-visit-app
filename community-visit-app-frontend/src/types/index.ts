@@ -67,6 +67,10 @@ export interface Household {
   remark: string
   /** 上次走访时间（空串 = 从未走访） */
   lastVisitTime: string
+  /** 管理员下发的走访任务指定时间（有效时覆盖规则计算的下次走访时间） */
+  adminVisitTime?: string
+  /** 走访任务过期后，以管理员指定时间为基点顺延得到的下次走访基准（有效时覆盖规则计算） */
+  expiredBaseVisitTime?: string
   /** 该户全部人员 */
   persons: Person[]
 }
@@ -89,7 +93,7 @@ export interface User {
 }
 
 /** 操作类别（含后续用户管理等分类） */
-export type OperationType = '变更信息' | '确认走访' | '用户管理'
+export type OperationType = '变更信息' | '确认走访' | '用户管理' | '待办事项'
 
 /** 操作记录 — 与后端 OperationLog 对齐 */
 export interface OperationLog {
@@ -113,3 +117,50 @@ export interface ApiResponse<T> {
 }
 
 
+
+// ─── 走访任务（管理员下发 → 责任区用户执行） ────────────────
+
+/** 任务明细状态 */
+export type TaskItemStatus = 'active' | 'done' | 'expired'
+
+/** 走访任务中的一户明细（每户独立状态） */
+export interface TodoTaskItem {
+  itemId: string
+  taskId: string
+  householdId: string
+  unitId: string
+  zoneId: string
+  communityId: string
+  zoneName: string
+  communityName: string
+  unitName: string
+  roomNo: string
+  houseType: HouseType
+  landlord: string
+  personsCount: number
+  /** 发布时上次走访时间快照 */
+  lastVisitTime: string
+  /** 发布时规则计算的下次走访时间快照 */
+  expectedVisitTime: string | null
+  status: TaskItemStatus
+  /** 成功确认走访时间（done） */
+  visitedAt?: string
+  /** 过期处理时间（expired） */
+  expiredAt?: string
+}
+
+/** 走访任务（一次下发 = 一个任务，含多户明细） */
+export interface TodoTask {
+  id: string
+  /** 接收的责任区 */
+  zoneId: string
+  zoneName: string
+  /** 接收用户账号名 */
+  assigneeUsername: string
+  /** 管理员指定的走访时间（截止）T */
+  scheduledVisitTime: string
+  /** 情况说明（可空） */
+  remark: string
+  createdAt: string
+  items: TodoTaskItem[]
+}

@@ -65,10 +65,11 @@ const locationText = (row: OperationLog) =>
 
 /** 操作类别 → 标签类型 */
 const typeTag = (t: string) => {
-  const map: Record<string, 'warning' | 'success' | 'primary' | 'info'> = {
+  const map: Record<string, 'warning' | 'success' | 'primary' | 'info' | 'danger'> = {
     变更信息: 'warning',
     确认走访: 'success',
-    用户管理: 'primary'
+    用户管理: 'primary',
+    待办事项: 'danger'
   }
   return map[t] ?? 'info'
 }
@@ -106,6 +107,9 @@ const pagedLogs = computed(() => {
   justify-content: center;
 }
 </style>
+
+
+
 
 
 

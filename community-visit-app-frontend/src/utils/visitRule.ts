@@ -55,3 +55,39 @@ export function isVisitDue(h: { houseType: HouseType; lastVisitTime: string }): 
   const dueAt = parseDateTime(exp)!.getTime() - VISIT_ADVANCE_DAYS * 24 * 3600 * 1000
   return Date.now() >= dueAt
 }
+
+/** 支持覆盖字段的住户（含走访任务产生的字段） */
+export type OverridableVisit = {
+  houseType: HouseType
+  lastVisitTime: string
+  adminVisitTime?: string
+  expiredBaseVisitTime?: string
+}
+
+/**
+ * 生效的预计走访时间：
+ * 1) 有管理员下发的未处理任务 → 取任务指定时间 T；
+ * 2) 任务已过期 → 以指定时间 T 为基点按类别间隔顺延；
+ * 3) 否则按规则（上次走访 + 类别间隔）。
+ */
+export function effectiveExpectedVisitTime(h: OverridableVisit): string | null {
+  if (h.adminVisitTime) return h.adminVisitTime
+  if (h.expiredBaseVisitTime) {
+    const base = parseDateTime(h.expiredBaseVisitTime)
+    if (base) {
+      const exp = new Date(base.getTime() + VISIT_INTERVAL_DAYS[h.houseType] * 24 * 3600 * 1000)
+      return formatDateTime(exp)
+    }
+  }
+  return expectedVisitTime(h)
+}
+
+/** 基于生效预计走访时间判断是否需走访 */
+export function effectiveIsVisitDue(h: OverridableVisit): boolean {
+  if (!h.lastVisitTime) return true
+  const exp = effectiveExpectedVisitTime(h)
+  if (!exp) return false
+  const dueAt = parseDateTime(exp)!.getTime() - VISIT_ADVANCE_DAYS * 24 * 3600 * 1000
+  return Date.now() >= dueAt
+}
+

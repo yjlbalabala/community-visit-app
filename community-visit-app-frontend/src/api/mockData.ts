@@ -400,7 +400,9 @@ export function confirmUnitVisit(unitId: string, householdId: string): Household
   const now = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   const ts = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`
-  list[idx] = { ...h, lastVisitTime: ts }
+  // 实际走访后：清除任务指定的覆盖时间，恢复按规则计算
+  const { adminVisitTime, expiredBaseVisitTime, ...rest } = h
+  list[idx] = { ...rest, lastVisitTime: ts }
   return cloneHousehold(list[idx]!)
 }
 
@@ -457,6 +459,7 @@ export function removeUnitPerson(unitId: string, householdId: string, personId: 
   list[idx] = { ...h, persons, landlord, phone, remark: remarkOf(h.houseType, persons.length) }
   return cloneHousehold(list[idx]!)
 }
+
 
 
 

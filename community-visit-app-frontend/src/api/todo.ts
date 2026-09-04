@@ -6,7 +6,7 @@ import {
   fetchMockUnits,
   getUnitHouseholds
 } from './mockData'
-import { isVisitDue, expectedVisitTime } from '@/utils/visitRule'
+import { effectiveIsVisitDue, effectiveExpectedVisitTime } from '@/utils/visitRule'
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
@@ -88,8 +88,8 @@ export async function fetchScopeTodos(scope: TodoScope): Promise<TodoItem[]> {
         personsCount: h.persons.length,
         remark: h.remark,
         lastVisitTime: h.lastVisitTime,
-        expectedVisitTime: expectedVisitTime(h),
-        due: isVisitDue(h)
+        expectedVisitTime: effectiveExpectedVisitTime(h),
+        due: effectiveIsVisitDue(h)
       })
     }
   }
@@ -100,6 +100,7 @@ export async function fetchScopeTodos(scope: TodoScope): Promise<TodoItem[]> {
   })
   return items
 }
+
 
 
 

@@ -10,7 +10,8 @@ import {
   updatePerson as apiUpdatePerson,
   removePerson as apiRemovePerson
 } from '@/api/household'
-import { isVisitDue, expectedVisitTime } from '@/utils/visitRule'
+import { effectiveIsVisitDue, effectiveExpectedVisitTime } from '@/utils/visitRule'
+import { completeActiveTaskForHousehold } from '@/api/todoTask'
 
 export const useHouseholdStore = defineStore('household', () => {
   // ─── State ─────────────────────────────────────────────
@@ -24,10 +25,10 @@ export const useHouseholdStore = defineStore('household', () => {
   /** 待办事项：按走访规则到期（且非空户）的住户，按预计走访时间升序 */
   const todoList = computed(() =>
     list.value
-      .filter(h => h.persons.length > 0 && isVisitDue(h))
+      .filter(h => h.persons.length > 0 && effectiveIsVisitDue(h))
       .sort((a, b) => {
-        const ea = expectedVisitTime(a) ?? ''
-        const eb = expectedVisitTime(b) ?? ''
+        const ea = effectiveExpectedVisitTime(a) ?? ''
+        const eb = effectiveExpectedVisitTime(b) ?? ''
         return ea < eb ? -1 : ea > eb ? 1 : 0
       })
   )
@@ -91,6 +92,8 @@ export const useHouseholdStore = defineStore('household', () => {
     try {
       const updated = await apiConfirmVisit(unitId, householdId)
       replaceInList(updated)
+      // 若该户存在未处理的走访任务 → 标记成功走访（成功即任务消除，记操作记录）
+      await completeActiveTaskForHousehold(householdId, updated.lastVisitTime)
       ElMessage.success(`住户 ${updated.roomNo} 走访已确认`)
       return updated
     } catch (e: any) {
@@ -158,3 +161,5 @@ export const useHouseholdStore = defineStore('household', () => {
     addPerson, updatePerson, removePerson
   }
 })
+
+
