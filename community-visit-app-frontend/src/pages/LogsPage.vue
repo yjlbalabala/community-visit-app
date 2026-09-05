@@ -38,7 +38,7 @@
         </el-select>
       </div>
 
-      <div class="summary">共 {{ visibleLogs.length }} 条操作记录（点击住户位置可跳转到该户单元格视图）</div>
+      <div class="summary">共 {{ visibleLogs.length }} 条操作记录 </div>
       <OperationLogPanel :logs="visibleLogs" />
     </el-card>
   </div>

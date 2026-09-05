@@ -21,7 +21,9 @@
                   <thead><tr><th>住户</th><th>房屋</th><th>房主/人数</th><th>上次走访</th><th>状态</th><th>处理时间</th></tr></thead>
                   <tbody>
                     <tr v-for="it in row.items" :key="it.itemId">
-                      <td>{{ it.communityName }} · {{ it.unitName }} · {{ it.roomNo }}</td>
+                      <td>
+  <HouseLocationLink :zone-name="it.zoneName" :community-name="it.communityName" :unit-name="it.unitName" :room-no="it.roomNo" :unit-id="it.unitId" />
+</td>
                       <td>{{ it.houseType }}</td>
                       <td>{{ it.landlord }}（{{ it.personsCount }} 人）</td>
                       <td>{{ it.lastVisitTime || '—' }}</td>
@@ -59,7 +61,7 @@
             <template #default="{ row }">
               <div class="cell-click" @click="viewHousehold(row)">
                 <el-tag type="danger" size="small">待走访</el-tag>
-                <span class="loc">{{ row.communityName }} · {{ row.unitName }} · {{ row.roomNo }}</span>
+                <HouseLocationLink :zone-name="row.zoneName" :community-name="row.communityName" :unit-name="row.unitName" :room-no="row.roomNo" :unit-id="row.unitId" />
               </div>
             </template>
           </el-table-column>
@@ -108,6 +110,7 @@ import { confirmVisit } from '@/api/household'
 import { completeActiveTaskForHousehold, taskStatus } from '@/api/todoTask'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import PublishTaskDialog from '@/components/PublishTaskDialog.vue'
+import HouseLocationLink from '@/components/HouseLocationLink.vue'
 
 const authStore = useAuthStore()
 const todoTaskStore = useTodoTaskStore()
@@ -219,10 +222,8 @@ onMounted(async () => {
   gap: 8px;
   cursor: pointer;
 }
-.loc:hover {
-  color: #409eff;
-  text-decoration: underline;
-}
+
 </style>
+
 
 

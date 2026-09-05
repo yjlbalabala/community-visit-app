@@ -10,10 +10,13 @@
         <el-table-column prop="operatedAt" label="操作时间" width="170" />
         <el-table-column label="住户位置" min-width="260">
           <template #default="{ row }">
-            <span v-if="canJump(row)" class="loc-link" title="点击跳转到该户单元格视图" @click="goLoc(row)">
-              {{ locationText(row) }}
-            </span>
-            <span v-else>{{ locationText(row) || '—' }}</span>
+            <HouseLocationLink
+              :zone-name="row.zoneName"
+              :community-name="row.communityName"
+              :unit-name="row.unitName"
+              :room-no="row.roomNo"
+              :unit-id="row.unitId"
+            />
           </template>
         </el-table-column>
         <el-table-column prop="operationType" label="操作类别" width="110">
@@ -53,8 +56,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import type { OperationLog } from '@/types'
+import HouseLocationLink from '@/components/HouseLocationLink.vue'
 
 const props = defineProps<{
   logs: OperationLog[]
@@ -63,20 +66,7 @@ const props = defineProps<{
 const currentPage = ref(1)
 const pageSize = 10
 
-const router = useRouter()
 
-/** 完整位置：责任区 · 小区 · 单元 · 房号 */
-const locationText = (row: OperationLog) =>
-  [row.zoneName, row.communityName, row.unitName, row.roomNo].filter(Boolean).join(' · ')
-
-/** 有单元 id 与房号时可点击跳转到该户单元格视图 */
-const canJump = (row: OperationLog) => !!row.unitId && !!row.roomNo
-
-const goLoc = (row: OperationLog) => {
-  if (row.unitId && row.roomNo) {
-    router.push({ path: `/unit/${row.unitId}`, query: { roomNo: row.roomNo } })
-  }
-}
 
 /** 操作类别 → 标签类型 */
 const typeTag = (t: string) => {
@@ -130,15 +120,7 @@ const pagedLogs = computed(() => {
 
 
 
-.loc-link {
-  color: inherit;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-.loc-link:hover {
-  color: #409eff;
-  text-decoration: underline;
-}
+
 
 
 

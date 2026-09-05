@@ -12,7 +12,7 @@
       <div class="scope-bar">
         <span class="scope-label">统计范围：</span>
         <el-tag v-if="zoneLocked" type="primary" size="small" effect="plain">当前辖区：{{ currentZoneName }}</el-tag>
-        <el-select v-model="zoneId" placeholder="选择责任区" class="scope-select" :disabled="zoneLocked" @change="handleZoneChange">
+        <el-select v-model="zoneId" :placeholder="zoneLocked ? '选择责任区' : '西岗街道（全部）'" clearable class="scope-select" :disabled="zoneLocked" @change="handleZoneChange">
           <el-option v-for="z in zonesOptions" :key="z.id" :label="z.name" :value="z.id" />
         </el-select>
         <el-select v-model="communityId" placeholder="全部小区" clearable class="scope-select" :disabled="!zoneId" @change="handleScopeChange">
@@ -76,11 +76,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import { useRoute } from 'vue-router'
 import type { TreeNode } from '@/types'
-import { fetchZones, fetchCommunities, fetchUnits } from '@/api/hierarchy'
+import { fetchZones, fetchCommunities, fetchUnits, STREET_ID } from '@/api/hierarchy'
 import { fetchAreaStats, type AreaScope, type AreaStats } from '@/api/stats'
 import { useAuthStore } from '@/stores/auth'
 import { HOUSE_COLOR_MAP } from '@/utils/houseColor'
@@ -103,7 +103,7 @@ const currentZoneName = computed(() => zones.value.find(z => z.id === zoneId.val
 const scopeText = computed(() => {
   const c = communities.value.find(x => x.id === communityId.value)?.name
   const u = units.value.find(x => x.id === unitId.value)?.name
-  return [currentZoneName.value, c, u].filter(Boolean).join(' · ') || '—'
+  return [currentZoneName.value || '西岗街道（全部责任区）', c, u].filter(Boolean).join(' · ')
 })
 
 // ─── 图表 ─────────────────────────────────────────────
@@ -194,7 +194,7 @@ const scope = computed<AreaScope | null>(() => {
   if (unitId.value) return { nodeType: 'unit', id: unitId.value }
   if (communityId.value) return { nodeType: 'community', id: communityId.value }
   if (zoneId.value) return { nodeType: 'zone', id: zoneId.value }
-  return null
+  return { nodeType: 'street', id: STREET_ID }
 })
 
 const reload = async () => {
@@ -212,11 +212,22 @@ const reload = async () => {
   }
 }
 
+watch(zoneId, async (id) => {
+  if (!id) {
+    communityId.value = ''
+    unitId.value = ''
+    communities.value = []
+    units.value = []
+    await reload()
+  }
+})
+
 const handleZoneChange = async (id: string) => {
+  if (!id) return // 清空已由 watch(zoneId) 处理（回到全街道）
   zoneId.value = id
   communityId.value = ''
   unitId.value = ''
-  communities.value = id ? await fetchCommunities(id) : []
+  communities.value = await fetchCommunities(id)
   units.value = []
   await reload()
 }
@@ -251,8 +262,9 @@ onMounted(async () => {
 
   if (zoneLocked.value && authStore.userZoneId) {
     await handleZoneChange(authStore.userZoneId)
-  } else if (zones.value[0]) {
-    await handleZoneChange(zones.value[0].id)
+  } else {
+    // 管理员：默认全街道（所有责任区）总体
+    await reload()
   }
 })
 
@@ -359,6 +371,9 @@ onBeforeUnmount(() => {
   }
 }
 </style>
+
+
+
 
 
 
