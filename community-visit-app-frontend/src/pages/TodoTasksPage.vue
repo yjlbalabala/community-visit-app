@@ -5,7 +5,7 @@
         <div class="page-header">
           <span class="card-title">📋 待办事项</span>
           <div class="header-right">
-            <span v-if="!authStore.isAdmin" class="card-sub">辖区：{{ authStore.currentUser?.zoneId ? zoneName : '' }} · 待走访 {{ activeCount }} 户</span>
+            <span v-if="!authStore.isAdmin" class="card-sub">辖区：{{ authStore.currentUser?.zoneId ? zoneName : '' }} · 待走访 {{ userAllActive }} 户</span>
             <el-button v-if="authStore.isAdmin" type="primary" :icon="Plus" @click="publishVisible = true">发布走访任务</el-button>
           </div>
         </div>
@@ -13,7 +13,27 @@
 
       <!-- 管理员：我发布的记录 -->
       <template v-if="authStore.isAdmin">
-        <el-table :data="todoTaskStore.adminTasks" row-key="id" stripe border>
+        <!-- 筛选：接收用户 / 责任区 / 状态 / 说明关键词 / 发布时间段 -->
+        <div class="filter-row">
+          <span class="filter-label">筛选条件：</span>
+          <el-input v-model="adminAssignee" placeholder="接收用户（账号/姓名）" clearable class="filter-input" />
+          <el-select v-model="adminZoneId" placeholder="全部责任区" clearable class="filter-select">
+            <el-option v-for="z in zones" :key="z.id" :label="z.name" :value="z.id" />
+          </el-select>
+          <el-select v-model="adminStatus" placeholder="全部状态" clearable class="status-select">
+            <el-option label="进行中" value="active" />
+            <el-option label="已完成" value="done" />
+            <el-option label="已过期" value="expired" />
+          </el-select>
+          <el-input v-model="adminRemark" placeholder="说明关键词" clearable class="filter-input" />
+          <span class="cond-item">
+            <span class="cond-name">发布时间</span>
+            <TimeRangeSelect v-model="adminTimeRange" start-placeholder="开始日期" end-placeholder="结束日期" width="240px" />
+          </span>
+          <el-button :icon="RefreshLeft" @click="resetAdminCond">重置条件</el-button>
+        </div>
+        <div class="summary">共 {{ filteredAdminTasks.length }} 条发布记录</div>
+        <el-table :data="filteredAdminTasks" row-key="id" stripe border>
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="task-items">
@@ -51,16 +71,38 @@
           <el-table-column prop="remark" label="说明" min-width="140" show-overflow-tooltip />
           <el-table-column prop="createdAt" label="发布时间" width="170" />
         </el-table>
-        <el-empty v-if="todoTaskStore.adminTasks.length === 0" description="暂无发布的走访任务" :image-size="70" />
+        <el-empty v-if="filteredAdminTasks.length === 0" description="没有符合条件的发布记录" :image-size="70" />
       </template>
 
       <!-- 普通用户：我接收的任务 -->
       <template v-else>
-        <el-table :data="activeItems" row-key="itemId" stripe border v-loading="todoTaskStore.loading">
+        <!-- 筛选：关键词 / 房屋类别 / 状态 / 发布时间段 -->
+        <div class="filter-row">
+          <span class="filter-label">筛选条件：</span>
+          <el-input v-model="userKeyword" placeholder="房号 / 房主 / 小区 / 单元 / 说明" clearable class="filter-input" />
+          <el-select v-model="userHouseType" placeholder="全部房屋类别" clearable class="house-filter-select">
+            <el-option label="自购房" value="自购房" />
+            <el-option label="出租房" value="出租房" />
+            <el-option label="群租房" value="群租房" />
+          </el-select>
+          <el-select v-model="userStatus" placeholder="全部状态" clearable class="status-select">
+            <el-option label="待走访" value="active" />
+            <el-option label="已完成" value="done" />
+            <el-option label="未走访" value="expired" />
+          </el-select>
+          <span class="cond-item">
+            <span class="cond-name">发布时间</span>
+            <TimeRangeSelect v-model="userTimeRange" start-placeholder="开始日期" end-placeholder="结束日期" width="240px" />
+          </span>
+          <el-button :icon="RefreshLeft" @click="resetUserCond">重置条件</el-button>
+        </div>
+        <div class="summary">共 {{ filteredUserItems.length }} 条 · 其中待走访 {{ userFilteredActive }} 条</div>
+
+        <el-table :data="filteredUserItems" row-key="itemId" stripe border v-loading="todoTaskStore.loading">
           <el-table-column label="住户（点击查看）" min-width="250">
             <template #default="{ row }">
-              <div class="cell-click" @click="viewHousehold(row)">
-                <el-tag type="danger" size="small">待走访</el-tag>
+              <div class="cell-loc">
+                <el-tag :type="itemTag(row.status)" size="small">{{ itemStatusText(row.status) }}</el-tag>
                 <HouseLocationLink :zone-name="row.zoneName" :community-name="row.communityName" :unit-name="row.unitName" :room-no="row.roomNo" :unit-id="row.unitId" />
               </div>
             </template>
@@ -73,23 +115,26 @@
           <el-table-column label="房主 / 人数" width="130">
             <template #default="{ row }">{{ row.landlord }}（{{ row.personsCount }} 人）</template>
           </el-table-column>
-          <el-table-column label="上次走访" width="160">
+          <el-table-column label="上次走访" width="150">
             <template #default="{ row }">{{ row.lastVisitTime || '从未走访' }}</template>
           </el-table-column>
-          <el-table-column label="指定走访时间" width="170">
+          <el-table-column label="指定走访时间" width="160">
             <template #default="{ row }">
-              <b style="color:#f56c6c">{{ row.taskScheduledVisitTime }}</b>
+              <b :style="{ color: row.status === 'active' ? '#f56c6c' : '#303133' }">{{ row.taskScheduledVisitTime }}</b>
             </template>
           </el-table-column>
-          <el-table-column prop="taskRemark" label="说明" min-width="120" show-overflow-tooltip />
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column label="处理时间" width="160">
+            <template #default="{ row }">{{ row.visitedAt || row.expiredAt || '—' }}</template>
+          </el-table-column>
+          <el-table-column prop="taskRemark" label="说明" min-width="110" show-overflow-tooltip />
+          <el-table-column label="操作" width="170" fixed="right">
             <template #default="{ row }">
               <el-button link type="info" size="small" @click="viewHousehold(row)">详情</el-button>
-              <el-button link type="success" size="small" @click="handleConfirm(row)">确认走访</el-button>
+              <el-button v-if="row.status === 'active'" link type="success" size="small" @click="handleConfirm(row)">确认走访</el-button>
             </template>
           </el-table-column>
         </el-table>
-        <el-empty v-if="activeItems.length === 0" description="暂无待处理的走访任务" :image-size="70" />
+        <el-empty v-if="filteredUserItems.length === 0" description="没有符合条件的走访任务" :image-size="70" />
       </template>
     </el-card>
 
@@ -100,8 +145,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Plus } from '@element-plus/icons-vue'
-import type { HouseType, TodoTask, TodoTaskItem, TaskItemStatus } from '@/types'
+import { Plus, RefreshLeft } from '@element-plus/icons-vue'
+import type { HouseType, TodoTask, TodoTaskItem, TaskItemStatus, TreeNode } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useTodoTaskStore } from '@/stores/todoTask'
 import { useOperationLogStore } from '@/stores/operationLog'
@@ -111,6 +156,7 @@ import { completeActiveTaskForHousehold, taskStatus } from '@/api/todoTask'
 import { HOUSE_TAG_MAP } from '@/utils/houseColor'
 import PublishTaskDialog from '@/components/PublishTaskDialog.vue'
 import HouseLocationLink from '@/components/HouseLocationLink.vue'
+import TimeRangeSelect, { type DateRange } from '@/components/TimeRangeSelect.vue'
 
 const authStore = useAuthStore()
 const todoTaskStore = useTodoTaskStore()
@@ -120,20 +166,85 @@ const router = useRouter()
 const publishVisible = ref(false)
 const zoneName = ref('')
 
-type RowItem = TodoTaskItem & { taskScheduledVisitTime: string; taskRemark: string }
+// ─── 管理员筛选条件 ────────────────────────────────────
+const zones = ref<TreeNode[]>([])
+const adminAssignee = ref('')
+const adminZoneId = ref('')
+const adminStatus = ref('')
+const adminRemark = ref('')
+const adminTimeRange = ref<DateRange>(null)
 
-const activeItems = computed<RowItem[]>(() => {
+const filteredAdminTasks = computed(() => {
+  const list = todoTaskStore.adminTasks
+  const kwUser = adminAssignee.value.trim().toLowerCase()
+  const kwRemark = adminRemark.value.trim().toLowerCase()
+  return list.filter(t => {
+    if (kwUser && !t.assigneeUsername.toLowerCase().includes(kwUser)) return false
+    if (adminZoneId.value && t.zoneId !== adminZoneId.value) return false
+    if (adminStatus.value && taskStatus(t) !== adminStatus.value) return false
+    if (kwRemark && !(t.remark || '').toLowerCase().includes(kwRemark)) return false
+    if (adminTimeRange.value) {
+      const d = (t.createdAt || '').slice(0, 10)
+      if (!d || d < adminTimeRange.value[0] || d > adminTimeRange.value[1]) return false
+    }
+    return true
+  })
+})
+
+const resetAdminCond = () => {
+  adminAssignee.value = ''
+  adminZoneId.value = ''
+  adminStatus.value = ''
+  adminRemark.value = ''
+  adminTimeRange.value = null
+}
+
+type RowItem = TodoTaskItem & { taskScheduledVisitTime: string; taskCreatedAt: string; taskRemark: string }
+
+const allItems = computed<RowItem[]>(() => {
   const out: RowItem[] = []
   for (const t of todoTaskStore.zoneTasks) {
     for (const it of t.items) {
-      if (it.status === 'active') {
-        out.push({ ...it, taskScheduledVisitTime: t.scheduledVisitTime, taskRemark: t.remark })
-      }
+      out.push({ ...it, taskScheduledVisitTime: t.scheduledVisitTime, taskCreatedAt: t.createdAt, taskRemark: t.remark })
     }
   }
   return out
 })
-const activeCount = computed(() => activeItems.value.length)
+
+/** 全部任务中处于待走访的数量（不受筛选影响，用于头部提示） */
+const userAllActive = computed(() => allItems.value.filter(i => i.status === 'active').length)
+
+// ─── 普通用户筛选条件 ────────────────────────────────────
+const userKeyword = ref('')
+const userHouseType = ref('')
+const userStatus = ref('active')
+const userTimeRange = ref<DateRange>(null)
+
+const filteredUserItems = computed<RowItem[]>(() => {
+  const kw = userKeyword.value.trim().toLowerCase()
+  return allItems.value.filter(i => {
+    if (userStatus.value && i.status !== userStatus.value) return false
+    if (userHouseType.value && i.houseType !== userHouseType.value) return false
+    if (kw) {
+      const hay = `${i.zoneName} ${i.communityName} ${i.unitName} ${i.roomNo} ${i.landlord} ${i.taskRemark || ''}`.toLowerCase()
+      if (!hay.includes(kw)) return false
+    }
+    if (userTimeRange.value) {
+      const d = (i.taskCreatedAt || '').slice(0, 10)
+      if (!d || d < userTimeRange.value[0] || d > userTimeRange.value[1]) return false
+    }
+    return true
+  })
+})
+
+const userFilteredActive = computed(() => filteredUserItems.value.filter(i => i.status === 'active').length)
+
+const resetUserCond = () => {
+  userKeyword.value = ''
+  userHouseType.value = ''
+  userStatus.value = ''
+  userTimeRange.value = null
+}
 
 const houseTagOf = (t: HouseType) => HOUSE_TAG_MAP[t] || 'info'
 const activeNumOf = (t: TodoTask) => t.items.filter(i => i.status === 'active').length
@@ -175,9 +286,10 @@ const refresh = async () => {
 }
 
 onMounted(async () => {
+  const allZones = await fetchZones()
+  zones.value = allZones
   if (!authStore.isAdmin && authStore.userZoneId) {
-    const path = await fetchZones()
-    zoneName.value = path.find(z => z.id === authStore.userZoneId)?.name ?? ''
+    zoneName.value = allZones.find(z => z.id === authStore.userZoneId)?.name ?? ''
   }
   await refresh()
 })
@@ -198,6 +310,53 @@ onMounted(async () => {
 .card-sub {
   color: #909399;
   font-size: 13px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+.filter-label {
+  color: #606266;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.filter-input {
+  width: 180px;
+}
+.filter-select {
+  width: 170px;
+}
+.status-select {
+  width: 130px;
+}
+.house-filter-select {
+  width: 150px;
+}
+.cell-loc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cond-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cond-name {
+  color: #909399;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.summary {
+  color: #909399;
+  font-size: 13px;
+  margin-bottom: 10px;
 }
 .task-items {
   padding: 6px 18px;
@@ -224,6 +383,12 @@ onMounted(async () => {
 }
 
 </style>
+
+
+
+
+
+
 
 
 
